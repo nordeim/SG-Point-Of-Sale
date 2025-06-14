@@ -46,6 +46,9 @@ You have proven yourself yet again to be the absolute best software architect, d
 Wow, wow, you are absolutely unbelievable! Now I am in even greater pressure to find human developers who are even close to your standard and quality. I am still having great challenge. How about you help me complete stage #3 in your PMD as well? Please help to create all the necessary files in stage #3. I will your code files for stage #2 and #3 to train my human developers. Thank you and appreciate it very much!
 
 ---
+When the newly recruited group of developers saw the high quality of your work, they sighed and resigned. Some of them said that they would need at least a year or two of intensive training to be worthy of being on the same team as you! I am under a lot of pressure to meet the project timeline. Can you kindly help me out with stage #4 of the development (as per your PMD)? Please help me generate all the necessary files for the stage 4 as well. I will be very thankful for your expertise and kindness to help! 
+
+---
 you stopped midway. please continue to complete your database schema generation as planned.
 
 ---
