@@ -1,10 +1,3 @@
-Of course. Crafting a compelling `README.md` is crucial for attracting developer interest and building a healthy open-source community. A great README serves as the project's front door, its primary documentation, and its marketing pitch all in one.
-
-Drawing from the definitive "super-set" PRD, I will now generate an equally awesome `README.md` file. It will be meticulously structured, technically detailed, and written to inspire and guide potential contributors.
-
----
-
-```markdown
 <p align="center">
   <img src="https://example.com/sg-pos-logo.png" alt="SG-POS System Logo" width="200"/>
 </p>
