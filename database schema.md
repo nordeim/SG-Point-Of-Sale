@@ -107,3 +107,33 @@ COMMENT ON TABLE permissions IS 'Defines granular permissions within the system.
 CREATE TABLE role_permissions (
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE
+
+-- Best practice: Isolate the application's tables within their own schema.
+CREATE SCHEMA IF NOT EXISTS sgpos;
+SET search_path TO sgpos;
+
+-- Enable the pgcrypto extension to generate UUIDs.
+-- This should be run once by a superuser on the target database.
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+
+-- =============================================================================
+-- Section 1: Core Business & Multi-Tenancy Structure
+-- Description: Defines the top-level entities for companies and their outlets.
+-- =============================================================================
+
+CREATE TABLE companies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    registration_number VARCHAR(20) UNIQUE NOT NULL COMMENT 'Singapore UEN (Unique Entity Number)',
+    gst_registration_number VARCHAR(20) UNIQUE,
+    address TEXT,
+    phone VARCHAR(20),
+    email VARCHAR(255),
+    base_currency CHAR(3) NOT NULL DEFAULT 'SGD',
+    fiscal_year_start DATE,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE companies IS 'Top-level entity for multi-tenancy support. Each
