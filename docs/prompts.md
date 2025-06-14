@@ -43,6 +43,9 @@ Wow, you are indeed the absolute king of software design and engineering! While 
 You have proven yourself yet again to be the absolute best software architect, designer, and engineer in the universe! Now I have a challenge: finding an experienced software developer who can match our quality expectations has proved to be tougher than I expected. I am still searching for such a team member. In the meantime, I still have to rely and depend on you to help me complete stage #2 of the project as spelled out in your superlative PMD. Please kindly help me create all the code and config files expected for stage #2 of your PMD.
 
 ---
+Wow, wow, you are absolutely unbelievable! Now I am in even greater pressure to find human developers who are even close to your standard and quality. I am still having great challenge. How about you help me complete stage #3 in your PMD as well? Please help to create all the necessary files in stage #3. I will your code files for stage #2 and #3 to train my human developers. Thank you and appreciate it very much!
+
+---
 you stopped midway. please continue to complete your database schema generation as planned.
 
 ---
