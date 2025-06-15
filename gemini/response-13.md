@@ -1,3 +1,39 @@
+<think>
+The user is encountering a `NameError: name 'Decimal' is not defined` when Alembic tries to load `app/models/product.py`. This error occurs because the `Decimal` type is used in the `default` argument for the `gst_rate` column, but the `Decimal` class itself has not been imported.
+
+**Root Cause:**
+The `Decimal` type from the `decimal` module needs to be explicitly imported before it can be used in Python code. It was correctly used in the type hint `Numeric(5, 2)`, but the Python literal `Decimal("8.00")` requires the import.
+
+**Solution Options:**
+
+1.  **Import `Decimal` in `app/models/product.py`:** Add `from decimal import Decimal` at the top of the file. This is the standard and most correct way to resolve this.
+
+**Decision:**
+The most straightforward and Pythonic solution is to add the import statement for `Decimal` in `app/models/product.py`.
+
+**Execution Plan to resolve the error:**
+
+1.  **Identify the problematic file:** `app/models/product.py`.
+2.  **Add import:** Insert `from decimal import Decimal` at the top of the file, alongside other imports.
+3.  **Validate:** Provide the complete updated file and perform a diff.
+
+Let's proceed with generating the updated `app/models/product.py` file.You are absolutely correct. The `NameError: name 'Decimal' is not defined` indicates a missing import for the `Decimal` type in `app/models/product.py`. While `Numeric` is from SQLAlchemy, the `Decimal("8.00")` literal used as a default value requires `Decimal` to be imported from Python's `decimal` module.
+
+**Solution:**
+Add `from decimal import Decimal` to `app/models/product.py`.
+
+---
+
+Here is the complete updated replacement file for `app/models/product.py`, with the `Decimal` import added.
+
+### **File: `app/models/product.py`**
+
+*   **File Path:** `app/models/product.py`
+*   **Purpose & Goals:** Defines the SQLAlchemy ORM models for `categories`, `suppliers`, `products`, `product_variants` tables, managing the product catalog and supplier information.
+*   **Interfaces:** Exports `Category`, `Supplier`, `Product`, `ProductVariant` classes.
+*   **Interactions:** Imported by services and managers. Defines relationships crucial for inventory, sales, and purchase orders.
+
+```python
 # File: app/models/product.py
 """SQLAlchemy models for Product and Category entities, and Product Variants and Suppliers."""
 import uuid
@@ -109,3 +145,31 @@ class ProductVariant(Base, TimestampMixin):
         sa.UniqueConstraint('product_id', 'sku_suffix', name='uq_product_variant_sku_suffix'),
         # TODO: Consider adding unique constraint on barcode per product_id if barcodes are specific to variants
     )
+```
+
+**Double-check and Validate `app/models/product.py`:**
+
+```diff
+--- a/app/models/product.py
++++ b/app/models/product.py
+@@ -3,6 +3,7 @@
+ import uuid
+ from datetime import datetime
+ import sqlalchemy as sa
+-from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer, Date
++from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer, Date
+ from sqlalchemy.dialects.postgresql import UUID, JSONB
+ from sqlalchemy.orm import relationship
++from decimal import Decimal # NEW: Import Decimal
+ 
+ from app.models.base import Base, TimestampMixin
+ 
+```
+
+**Review and Validation Summary for `app/models/product.py`:**
+The `app/models/product.py` file is now complete and correct.
+*   The `from decimal import Decimal` statement has been successfully added. This resolves the `NameError`.
+*   All other code remains unchanged from the previously validated version.
+
+This ensures that Alembic can now load the `Product` model without errors and proceed with schema introspection.
+

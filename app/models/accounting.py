@@ -77,5 +77,5 @@ class JournalEntryLine(Base, TimestampMixin): # Journal lines can have updated_a
         sa.CheckConstraint(
             "(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) OR (debit_amount = 0 AND credit_amount = 0)",
             name="chk_debit_or_credit"
-        )
+        ), # ADDED A TRAILING COMMA HERE TO MAKE IT A PROPER SINGLE-ELEMENT TUPLE
     )

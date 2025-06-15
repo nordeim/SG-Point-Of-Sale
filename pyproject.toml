@@ -28,7 +28,7 @@ keywords = ["pos", "point-of-sale", "retail", "singapore", "gst", "pyside6", "qt
 # Specifies that this project is compatible with Python 3.11 and any later minor versions,
 # but not Python 4.0. This aligns with the PRD's technology stack choice.
 [tool.poetry.dependencies]
-python = ">=3.11,<3.14" # Updated to reflect compatibility with 3.11, 3.12, 3.13 (if available)
+python = ">=3.11,<3.14"
 
 # --- Core Production Dependencies ---
 # These are the essential packages required for the application to run in production.
@@ -63,6 +63,9 @@ qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g.,
 # These packages are only installed in development environments (`poetry install --with dev`).
 # This keeps the production installation lean and clean.
 [tool.poetry.group.dev.dependencies]
+# NEW: Add psycopg2-binary for Alembic's synchronous connection to PostgreSQL
+psycopg2-binary = "^2.9.10" # Or latest stable version
+
 # Testing Framework
 pytest = "^8.2.0"             # The primary testing framework.
 pytest-qt = "^4.2.0"          # For testing PySide6 UI components.
