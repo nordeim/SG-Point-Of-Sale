@@ -1,0 +1,172 @@
+# ==============================================================================
+# pyproject.toml for the SG Point-of-Sale (SG-POS) System
+# ------------------------------------------------------------------------------
+# This file manages the entire project's metadata, dependencies, and development
+# tool configurations using the Poetry build system. It is the single source of
+# truth for setting up the development environment.
+#
+# For more information on the TOML format: https://toml.io
+# For more information on Poetry: https://python-poetry.org
+# ==============================================================================
+
+[tool.poetry]
+# --- Project Metadata ---
+# This information is used for packaging the application and for display on
+# package indexes like PyPI if the project is ever published.
+name = "sg-pos-system"
+version = "1.0.0"
+description = "An enterprise-grade, open-source Point-of-Sale system, meticulously engineered for Singapore's SMB retail landscape."
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/your-org/sg-pos-system"
+repository = "https://github.com/your-org/sg-pos-system"
+documentation = "https://github.com/your-org/sg-pos-system/blob/main/docs/index.md"
+keywords = ["pos", "point-of-sale", "retail", "singapore", "gst", "pyside6", "qt6", "python"]
+
+# --- Python Version Constraint ---
+# Specifies that this project is compatible with Python 3.11 and any later minor versions,
+# but not Python 4.0. This aligns with the PRD's technology stack choice.
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# --- Core Production Dependencies ---
+# These are the essential packages required for the application to run in production.
+
+# GUI Framework
+PySide6 = "^6.6.0"         # The core Qt6 bindings for Python.
+
+# Database & ORM
+SQLAlchemy = {version = "^2.0.23", extras = ["asyncio"]} # The industry-standard ORM, with asyncio support.
+alembic = "^1.12.1"        # For database schema migrations.
+asyncpg = "^0.29.0"        # High-performance asyncio driver for PostgreSQL.
+
+# Data Validation & Settings
+pydantic = "^2.5.2"        # For Data Transfer Objects (DTOs) and settings management.
+python-dotenv = "^1.0.0"   # For loading environment variables from .env files.
+
+# Security
+bcrypt = "^4.0.1"          # For secure password hashing.
+cryptography = "^41.0.5"   # For any custom encryption needs.
+
+# Logging
+structlog = "^23.2.0"       # For structured, context-aware logging.
+
+# External Integrations & Utilities
+aiohttp = "^3.8.6"         # Asynchronous HTTP client for API integrations.
+reportlab = "^4.0.4"       # For generating PDF receipts and reports.
+openpyxl = "^3.1.2"        # For exporting data to Excel (.xlsx) files.
+qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g., for PayNow).
+
+
+# --- Development Group Dependencies ---
+# These packages are only installed in development environments (`poetry install --with dev`).
+# This keeps the production installation lean and clean.
+[tool.poetry.group.dev.dependencies]
+# Testing Framework
+pytest = "^7.4.3"             # The primary testing framework.
+pytest-qt = "^4.2.0"          # For testing PySide6 UI components.
+pytest-asyncio = "^0.21.1"    # For testing asyncio code.
+pytest-cov = "^4.1.0"         # For measuring test coverage.
+factory-boy = "^3.3.0"        # For creating test data fixtures.
+
+# Code Quality & Formatting
+black = "^23.11.0"            # The uncompromising code formatter.
+ruff = "^0.1.6"               # An extremely fast Python linter, replacing flake8, isort, etc.
+mypy = "^1.7.0"               # Static type checker for Python.
+pre-commit = "^3.5.0"         # For managing and maintaining pre-commit hooks.
+
+# Documentation
+Sphinx = "^7.2.6"             # The standard documentation generator for Python projects.
+myst-parser = "^2.0.0"        # To write Sphinx documentation in Markdown.
+sphinx-rtd-theme = "^1.3.0"   # A popular theme for Sphinx docs.
+
+# Interactive Development
+ipython = "^8.17.2"           # A better interactive Python shell.
+
+
+# ==============================================================================
+# Tool Configurations
+# ------------------------------------------------------------------------------
+# Centralizing tool configurations here makes the project easier to manage.
+# ==============================================================================
+
+# --- Black (Code Formatter) Configuration ---
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+# --- Ruff (Linter) Configuration ---
+# Ruff is configured to be strict and to replace multiple older tools.
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+# Select a broad range of rules to enforce high code quality.
+# See all rules here: https://docs.astral.sh/ruff/rules/
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort (import sorting)
+    "B",  # flake8-bugbear (finds likely bugs)
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade (modernizes syntax)
+    "S",  # bandit (security linter)
+    "SIM",# flake8-simplify
+]
+ignore = ["E501"] # Ignored by black formatter anyway.
+
+[tool.ruff.mccabe]
+max-complexity = 10 # Keep functions simple and readable.
+
+# --- MyPy (Static Type Checker) Configuration ---
+# Enforces strict type checking for robust code.
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+strict_optional = true
+show_error_codes = true
+exclude = ["migrations/"]
+
+
+# --- Pytest Configuration ---
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --cov=app --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto" # Automatically handle asyncio tests.
+qt_api = "pyside6"    # Specify the Qt binding for pytest-qt.
+
+
+# ==============================================================================
+# Build System Configuration
+# ------------------------------------------------------------------------------
+# This section is required by PEP 517 and tells tools like pip how to build
+# the project package. For Poetry, this is standard boilerplate.
+# ==============================================================================
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

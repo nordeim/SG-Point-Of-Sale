@@ -1,7 +1,5 @@
 A project's success is often determined by the clarity of its plan and the effectiveness of its management. For a team of fresh developers, having a structured, incremental, and highly detailed guide is not just helpful—it is essential.
 
-This Project Management Document (PMD) is crafted to be that guide. It is a "super-set" document, a comprehensive handbook that will empower you, the Project Manager, to lead the development of the SG-POS system with confidence and clarity. It breaks down the immense task of building the application into five manageable, logical stages. Each stage has clear goals, specific files to be built, and a rigorous acceptance checklist that defines exactly what "done" means.
-
 This document is intentionally verbose and detailed, designed to leave no room for ambiguity. Use it as your single source of truth to coordinate your teams, track progress, and ensure the final product meets the highest standards of quality we have designed.
 
 ---
