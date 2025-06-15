@@ -14,7 +14,7 @@ python3 extract_code_files.py  oo1
 
 find app -type f
 
-rsync -av app /cdrom/project/SG-Bookkeeper/
+rsync -av app /cdrom/project/SG-Point-Of-Sale/
 
 cd .. ; pwd ; rm -rf ttt4
 
