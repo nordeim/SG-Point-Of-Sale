@@ -1,3 +1,4 @@
+-- File: scripts/database/schema.sql
 -- =============================================================================
 -- SG Point-of-Sale (SG-POS) System - Complete Database Schema
 -- Version: 2.0 (Super-Set Edition)

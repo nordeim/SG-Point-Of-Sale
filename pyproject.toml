@@ -28,7 +28,7 @@ keywords = ["pos", "point-of-sale", "retail", "singapore", "gst", "pyside6", "qt
 # Specifies that this project is compatible with Python 3.11 and any later minor versions,
 # but not Python 4.0. This aligns with the PRD's technology stack choice.
 [tool.poetry.dependencies]
-python = ">=3.11,<3.14"
+python = ">=3.11,<3.14" # Updated to reflect compatibility with 3.11, 3.12, 3.13 (if available)
 
 # --- Core Production Dependencies ---
 # These are the essential packages required for the application to run in production.
