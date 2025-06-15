@@ -1,7 +1,6 @@
-# Byte-compiled files and caches
+# Byte-code files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
 
 # Virtual environment directories (commonly used by Poetry or custom setups)
 bin/
@@ -12,49 +11,53 @@ lib64
 env/
 venv/
 
-# Distribution / build artifacts
-backup/
+# Environment variables
+.env
+.env.dev
+.env.production
+*.env # General ignore for .env files
+
+# Poetry specific
+.venv/
+poetry.lock
+
+# Database specific
+*.db
+*.sqlite
+data/
+
+# PySide6/Qt specific
+*.ui
+*.qrc
+*.moc
+*.qmlc
+*.pyi
+debug/
+release/
+
+# Build artifacts
 build/
 dist/
 *.egg-info/
 
-# PyInstaller build files (e.g., generated spec files and compiled resource modules)
-*.spec
-# poetry run pyside6-rcc resources/resources.qrc -o app/resources_rc.py
-# app/resources_rc.py
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Coverage and testing reports
-htmlcov/
-.tox/
+# Test coverage
 .coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
+.pytest_cache/
+htmlcov/
 
-# Type checking caches
+# MyPy cache
 .mypy_cache/
-.dmypy.json
-dmypy.json
 
-# Local configuration file (automatically generated for deployment settings)
-config.ini
-
-# Log files
-*.log
-
-# Operating system files
-.DS_Store
-Thumbs.db
-
-# Editor and IDE directories / settings
+# Editors & IDEs
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
