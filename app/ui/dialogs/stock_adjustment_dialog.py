@@ -12,7 +12,7 @@ and submit the adjustment. It orchestrates the process by:
 """
 from __future__ import annotations
 from decimal import Decimal
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any
 import uuid
 
 from PySide6.QtCore import (
@@ -31,23 +31,20 @@ from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
 
 class AdjustmentLineItem(QObject):
-    """Helper class to hold and represent cart item data for the TableModel."""
-    def __init__(self, product_id: uuid.UUID, sku: str, name: str, system_qty: Decimal, parent: Optional[QObject] = None):
+    """Helper class to hold and represent adjustment line item data for the TableModel."""
+    def __init__(self, product: ProductDTO, system_qty: Decimal, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self.product_id = product_id
-        self.sku = sku
-        self.name = name
+        self.product = product
         self.system_qty = system_qty
         self.counted_qty: Optional[Decimal] = None
 
     @property
     def variance(self) -> Decimal:
-        if self.counted_qty is None:
-            return Decimal("0")
+        if self.counted_qty is None: return Decimal("0")
         return (self.counted_qty - self.system_qty).quantize(Decimal("0.0001"))
 
     def to_stock_adjustment_item_dto(self) -> StockAdjustmentItemDTO:
-        return StockAdjustmentItemDTO(product_id=self.product_id, counted_quantity=self.counted_qty)
+        return StockAdjustmentItemDTO(product_id=self.product.id, variant_id=None, counted_quantity=self.counted_qty) # TODO: Handle variant_id
 
 
 class StockAdjustmentTableModel(QAbstractTableModel):
@@ -69,8 +66,8 @@ class StockAdjustmentTableModel(QAbstractTableModel):
         item = self._items[i.row()]
         col = i.column()
         if r == Qt.DisplayRole:
-            if col == 0: return item.sku
-            if col == 1: return item.name
+            if col == 0: return item.product.sku
+            if col == 1: return item.product.name
             if col == 2: return str(item.system_qty)
             if col == 3: return str(item.counted_qty) if item.counted_qty is not None else ""
             if col == 4: v = item.variance; return f"+{v}" if v > 0 else str(v)
@@ -79,7 +76,7 @@ class StockAdjustmentTableModel(QAbstractTableModel):
     def setData(self, i, v, r=Qt.EditRole):
         if r == Qt.EditRole and i.column() == self.COLUMN_COUNTED_QTY:
             try:
-                self._items[i.row()].counted_qty = Decimal(v) if v.strip() else None
+                self._items[i.row()].counted_qty = Decimal(v) if str(v).strip() else None
                 self.dataChanged.emit(i, self.createIndex(i.row(), self.columnCount() - 1))
                 self.data_changed_signal.emit()
                 return True
@@ -90,10 +87,10 @@ class StockAdjustmentTableModel(QAbstractTableModel):
         if i.column() == self.COLUMN_COUNTED_QTY: flags |= Qt.ItemIsEditable
         return flags
     def add_item(self, item: AdjustmentLineItem):
-        if any(i.product_id == item.product_id for i in self._items): return
-        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        self._items.append(item)
-        self.endInsertRows()
+        if any(i.product.id == item.product.id for i in self._items):
+            QMessageBox.information(self.parent(), "Duplicate Item", f"Product '{item.product.name}' is already in the list.")
+            return
+        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount()); self._items.append(item); self.endInsertRows()
         self.data_changed_signal.emit()
     def remove_item_at_row(self, r):
         if 0 <= r < len(self._items):
@@ -147,31 +144,31 @@ class StockAdjustmentDialog(QDialog):
     def _on_add_product_clicked(self):
         search_term = self.product_search_input.text().strip()
         if not search_term: return
-        def _on_done(result: Any, error: Optional[Exception]):
+        def _on_product_search_done(result: Any, error: Optional[Exception]):
             if error or isinstance(result, Failure): QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {error or result.error}"); return
             if isinstance(result, Success):
                 products: List[ProductDTO] = result.value
                 if not products: QMessageBox.warning(self, "Not Found", f"No product found for '{search_term}'."); return
                 p = products[0]
-                def _on_stock_done(stock_res, stock_err):
+                def _on_stock_fetch_done(stock_res, stock_err):
                     if stock_err or isinstance(stock_res, Failure): QMessageBox.critical(self, "Error", f"Failed to get stock level: {stock_err or stock_res.error}"); return
                     if isinstance(stock_res, Success):
-                        self.table_model.add_item(AdjustmentLineItem(p.id, p.sku, p.name, stock_res.value))
+                        self.table_model.add_item(AdjustmentLineItem(p, stock_res.value))
                         self.product_search_input.clear(); self.product_search_input.setFocus()
-                self.async_worker.run_task(self.core.inventory_service.get_stock_level(self.outlet_id, p.id, p.variant_id), _on_stock_done)
-        self.async_worker.run_task(self.core.product_manager.search_products(self.company_id, search_term, limit=1), _on_done)
+                self.async_worker.run_task(self.core.inventory_service.get_stock_level(self.outlet_id, p.id, None), _on_stock_fetch_done)
+        self.async_worker.run_task(self.core.product_manager.search_products(self.company_id, search_term, limit=1), _on_product_search_done)
 
     @Slot()
     def _on_submit_adjustment_clicked(self):
-        adjustment_dto = StockAdjustmentDTO(company_id=self.company_id, outlet_id=self.outlet_id, user_id=self.user_id,
-                                          notes=self.notes_input.toPlainText().strip(), items=self.table_model.get_adjustment_items())
+        dto = StockAdjustmentDTO(company_id=self.company_id, outlet_id=self.outlet_id, user_id=self.user_id,
+                                 notes=self.notes_input.toPlainText().strip(), items=self.table_model.get_adjustment_items())
         self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
         def _on_done(r, e):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
             if e or isinstance(r, Failure): QMessageBox.critical(self, "Submission Failed", f"Could not submit adjustment: {e or r.error}")
             elif isinstance(r, Success):
                 QMessageBox.information(self, "Success", "Stock adjustment submitted successfully."); self.operation_completed.emit(); self.accept()
-        self.async_worker.run_task(self.core.inventory_manager.adjust_stock(adjustment_dto), _on_done)
+        self.async_worker.run_task(self.core.inventory_manager.adjust_stock(dto), _on_done)
 
     @Slot(QPoint)
     def _on_table_context_menu(self, pos: QPoint):
