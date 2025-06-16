@@ -27,3 +27,19 @@ awesome job! now use the same rigorous and meticulous approach to generate *comp
 
 The important point is to proceed very carefully so as not to introduce any regression error or accidentally omit the original features or functions. use the same tested rigorous and meticulous approach. thank you and good luck!
 
+---
+You did not provide a line by line comparison of the files that you just generated against the earlier version of the files using the "diff". Do not miss this crucial step in future generations. 
+
+Below is "diff" command output comparing the previous version with your latest generated version. Please double-check and validate that the changes are valid and that no other original features or functions are lost (omitted). use the same rigorous and meticulous approach to review the diff output below.
+
+---
+In your previous generation of updated `app/ui/main_window.py`, you forgot to provide a line by line comparison of the files that you just generated against the earlier version of the file. This is a repeat of the critical failure. You need to stay more focused and be more meticulous and deliberate in your work. Do not miss this crucial step in future generations.
+
+Below is "diff" command output comparing the previous version with your latest generated version. Please double-check and validate that the changes are valid and that no other original features or functions are lost (omitted). use the same rigorous and meticulous approach to review the diff output below.
+
+---
+In your previous generation of updated `app/business_logic/managers/inventory_manager.py`, you forgot to provide a line by line comparison of the files that you just generated against the earlier version of the file. Do not miss this crucial step in future generations. 
+
+
+Below is "diff" command output comparing the previous version with your latest generated version. Please double-check and validate that the changes are valid and that no other original features or functions are lost (omitted). use the same rigorous and meticulous approach to review the diff output below.
+

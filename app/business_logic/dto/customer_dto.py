@@ -31,3 +31,10 @@ class CustomerDTO(CustomerBaseDTO):
 
     class Config:
         orm_mode = True
+
+class LoyaltyPointAdjustmentDTO(BaseModel):
+    """DTO for manually adjusting a customer's loyalty points."""
+    customer_id: uuid.UUID
+    points_change: int # Can be positive (add) or negative (deduct)
+    reason: str = Field(..., min_length=1, description="Reason for the manual adjustment (e.g., 'Goodwill gesture', 'Point correction')")
+    admin_user_id: uuid.UUID # User performing the adjustment

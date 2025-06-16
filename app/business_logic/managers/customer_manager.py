@@ -25,12 +25,7 @@ class CustomerManager(BaseManager):
     async def create_customer(self, company_id: UUID, dto: CustomerCreateDTO) -> Result[CustomerDTO, str]:
         """
         Creates a new customer.
-        Business rule: Customer code must be unique for the company.
-        Args:
-            company_id: The UUID of the company creating the customer.
-            dto: The CustomerCreateDTO containing customer data.
-        Returns:
-            A Success with the created CustomerDTO, or a Failure with an error message.
+        Business rule: Customer code and email must be unique for the company.
         """
         # Business rule: Check for duplicate customer code
         existing_result = await self.customer_service.get_by_code(company_id, dto.customer_code)
@@ -47,7 +42,6 @@ class CustomerManager(BaseManager):
             if email_check_result.value is not None:
                 return Failure(f"Business Rule Error: Customer with email '{dto.email}' already exists.")
 
-        # Convert DTO to ORM model instance
         new_customer = Customer(company_id=company_id, **dto.dict())
         
         create_result = await self.customer_service.create(new_customer)
@@ -57,14 +51,7 @@ class CustomerManager(BaseManager):
         return Success(CustomerDTO.from_orm(create_result.value))
 
     async def update_customer(self, customer_id: UUID, dto: CustomerUpdateDTO) -> Result[CustomerDTO, str]:
-        """
-        Updates an existing customer.
-        Args:
-            customer_id: The UUID of the customer to update.
-            dto: The CustomerUpdateDTO containing updated data.
-        Returns:
-            A Success with the updated CustomerDTO, or a Failure.
-        """
+        """Updates an existing customer."""
         customer_result = await self.customer_service.get_by_id(customer_id)
         if isinstance(customer_result, Failure):
             return customer_result
@@ -73,7 +60,6 @@ class CustomerManager(BaseManager):
         if not customer:
             return Failure("Customer not found.")
 
-        # Business rule: If customer code is changed, check for duplication
         if dto.customer_code != customer.customer_code:
             existing_result = await self.customer_service.get_by_code(customer.company_id, dto.customer_code)
             if isinstance(existing_result, Failure):
@@ -81,7 +67,6 @@ class CustomerManager(BaseManager):
             if existing_result.value is not None and existing_result.value.id != customer_id:
                 return Failure(f"Business Rule Error: New customer code '{dto.customer_code}' is already in use by another customer.")
         
-        # Business rule: If email is changed, check for duplication
         if dto.email and dto.email != customer.email:
             email_check_result = await self.customer_service.get_by_email(customer.company_id, dto.email)
             if isinstance(email_check_result, Failure):
@@ -89,7 +74,6 @@ class CustomerManager(BaseManager):
             if email_check_result.value is not None and email_check_result.value.id != customer_id:
                 return Failure(f"Business Rule Error: New email '{dto.email}' is already in use by another customer.")
 
-        # Update fields from DTO
         for field, value in dto.dict(exclude_unset=True).items():
             setattr(customer, field, value)
 
@@ -147,6 +131,29 @@ class CustomerManager(BaseManager):
     async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal) -> Result[int, str]:
         """
         Calculates and adds loyalty points for a completed sale.
-        This will be fully implemented in Stage 4.
+        Business Rule: 1 point for every S$10 spent (configurable in a future settings module).
         """
-        return Failure("add_loyalty_points_for_sale not yet implemented.")
+        loyalty_rate = Decimal("10.00")
+        points_to_add = int(sale_total // loyalty_rate)
+        
+        if points_to_add <= 0:
+            return Success(0)
+
+        try:
+            async with self.core.get_session() as session:
+                customer_result = await self.customer_service.get_by_id(customer_id)
+                if isinstance(customer_result, Failure): return customer_result
+                
+                customer = customer_result.value
+                if not customer: return Failure(f"Customer with ID {customer_id} not found.")
+                
+                customer.loyalty_points += points_to_add
+                
+                update_result = await self.customer_service.update(customer)
+                if isinstance(update_result, Failure): return update_result
+                    
+                # TODO: Log the loyalty transaction for auditing
+                return Success(customer.loyalty_points)
+        except Exception as e:
+            print(f"ERROR: Failed to add loyalty points for customer {customer_id}: {e}")
+            return Failure(f"Failed to add loyalty points: {e}")

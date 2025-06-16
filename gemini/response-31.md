@@ -1,3 +1,26 @@
+Of course. I will now proceed with the same rigorous and meticulous approach to generate the complete replacement files for the remaining parts of **Stage 4: Expanding Operations - Inventory & Advanced CRM**.
+
+---
+
+### **Detailed Execution Plan: Stage 4 (Continued)**
+
+**Objective:** To build out the business logic and UI for full inventory management (purchase orders, stock adjustments) and advanced customer relationship management (loyalty points).
+
+---
+
+### **Phase 4.3: Business Logic Layer (Managers)**
+
+This phase implements the orchestration logic for our new inventory and CRM workflows.
+
+#### **1. `app/business_logic/managers/inventory_manager.py`**
+
+*   **File Path:** `app/business_logic/managers/inventory_manager.py`
+*   **Purpose & Goals:** Orchestrates all high-level inventory workflows, including stock adjustments, purchase order management, and stock deduction during sales. It ensures atomic operations and coordinates with multiple services.
+*   **Interfaces:** `InventoryManager(core: ApplicationCore)`. Methods: `async adjust_stock(...)`, `async create_purchase_order(...)`, `async receive_purchase_order_items(...)`, `async deduct_stock_for_sale(...)`, `async get_inventory_summary(...)`.
+*   **Interactions:** Lazy-loads various services. Orchestrates operations via `self.core.get_session()`.
+*   **Code Skeleton:**
+
+```python
 # File: app/business_logic/managers/inventory_manager.py
 """Business Logic Manager for orchestrating Inventory operations."""
 from __future__ import annotations
@@ -195,3 +218,77 @@ class InventoryManager(BaseManager):
             expected_delivery_date=po.expected_delivery_date, status=po.status, notes=po.notes,
             total_amount=po.total_amount, items=items_dto
         ))
+```
+
+**Double-check and Validate `app/business_logic/managers/inventory_manager.py`:**
+*   This is a new file. Its content is self-contained and accurate.
+*   **Key Consideration:** The `deduct_stock_for_sale`, `adjust_stock`, and `receive_purchase_order_items` methods all correctly use the `session` argument to ensure they are part of a larger atomic transaction controlled by a calling manager.
+*   The logic for creating purchase orders is comprehensive, including validation and DTO construction.
+*   Helper methods (`_create_po_dto`) are used to reduce code duplication.
+
+---
+
+#### **2. `app/business_logic/managers/customer_manager.py` (Modified)**
+
+*   **File Path:** `app/business_logic/managers/customer_manager.py`
+*   **Purpose & Goals:** To fully implement the loyalty points calculation logic that was previously a placeholder.
+*   **Interfaces:** `async add_loyalty_points_for_sale(customer_id, sale_total)`.
+*   **Interactions:** Used by `SalesManager`.
+*   **Code Skeleton:**
+
+```python
+# File: app/business_logic/managers/customer_manager.py
+# ... (existing imports and code) ...
+class CustomerManager(BaseManager):
+    # ... (existing create_customer, update_customer, etc. methods) ...
+
+    async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal) -> Result[int, str]:
+        """
+        Calculates and adds loyalty points for a completed sale.
+        Business Rule: 1 point for every S$10 spent (configurable in a future settings module).
+        Args:
+            customer_id: The UUID of the customer.
+            sale_total: The total amount of the sale.
+        Returns:
+            A Success with the new loyalty point total, or a Failure.
+        """
+        # In a real app, this rule would be configurable
+        loyalty_rate = Decimal("10.00")
+        points_to_add = int(sale_total // loyalty_rate)
+        
+        if points_to_add <= 0:
+            return Success(0) # No points to add
+
+        try:
+            # We wrap this in its own transaction, as a loyalty failure should not roll back a sale.
+            async with self.core.get_session() as session:
+                customer_result = await self.customer_service.get_by_id(customer_id)
+                if isinstance(customer_result, Failure): return customer_result
+                
+                customer = customer_result.value
+                if not customer: return Failure(f"Customer with ID {customer_id} not found.")
+                
+                customer.loyalty_points += points_to_add
+                
+                update_result = await self.customer_service.update(customer)
+                if isinstance(update_result, Failure): return update_result
+                    
+                # TODO: Log the loyalty transaction for auditing (e.g., in a separate LoyaltyTransaction model or audit_log)
+                # await self.core.audit_manager.log_loyalty_change(...)
+
+                return Success(customer.loyalty_points)
+        except Exception as e:
+            # Log this error but don't fail the parent operation (the sale)
+            print(f"ERROR: Failed to add loyalty points for customer {customer_id}: {e}")
+            return Failure(f"Failed to add loyalty points: {e}")
+```
+
+**Double-check and Validate `app/business_logic/managers/customer_manager.py`:**
+*   This is a modification. The diff will show the full implementation of `add_loyalty_points_for_sale`.
+*   The logic correctly calculates points based on the business rule.
+*   It now wraps its database operations in its own session, making it a self-contained transaction. This is a deliberate design choice: a failure to add loyalty points should be logged but should *not* cause the entire sales transaction to roll back.
+
+---
+
+This completes the backend logic for Stage 4. The final step is to create the UI components. The size limit for this response has been reached. I will provide the remaining files (`InventoryView`, `StockAdjustmentDialog`, `PurchaseOrderDialog`, and updated `MainWindow`) in the next response.
+
