@@ -7,6 +7,9 @@ if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
 
 class BaseManager:
-    """Provides managers with access to the application core."""
+    """
+    Provides managers with access to the application core.
+    All managers should inherit from this class.
+    """
     def __init__(self, core: "ApplicationCore"):
         self.core = core
