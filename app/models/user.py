@@ -35,7 +35,7 @@ class User(Base, TimestampMixin):
         sa.UniqueConstraint('company_id', 'email', name='uq_user_company_email')
     )
 
-class Role(Base): # Roles don't need TimestampMixin if they're mostly static, schema does not define updated_at
+class Role(Base):
     """Defines user roles (e.g., Admin, Manager, Cashier)."""
     __tablename__ = "roles"
 
@@ -46,7 +46,7 @@ class Role(Base): # Roles don't need TimestampMixin if they're mostly static, sc
     is_system_role = Column(Boolean, nullable=False, default=False, doc="True for built-in roles that cannot be deleted or modified by users")
     
     # Relationships
-    company = relationship("Company", doc="The company this role belongs to") # No back_populates for this on Company
+    company = relationship("Company", back_populates="roles", doc="The company this role belongs to")
     role_permissions = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan", doc="Permissions assigned to this role")
     user_roles = relationship("UserRole", back_populates="role", cascade="all, delete-orphan", doc="Users assigned to this role")
 
@@ -54,13 +54,13 @@ class Role(Base): # Roles don't need TimestampMixin if they're mostly static, sc
         sa.UniqueConstraint('company_id', 'name', name='uq_role_company_name'),
     )
 
-class Permission(Base): # Permissions also don't need TimestampMixin
+class Permission(Base):
     """Defines granular permissions within the system."""
     __tablename__ = "permissions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the permission")
     action = Column(String(100), nullable=False, doc="The action permitted (e.g., 'CREATE', 'READ', 'UPDATE', 'DELETE')")
-    resource = Column(String(100), nullable=False, doc="The resource or module the action applies to (e.g., 'PRODUCT', 'SALE_TRANSACTION', 'USER_MANAGEMENT')")
+    resource = Column(String(100), nullable=False, doc="The resource or module the action applies to (e.g., 'PRODUCT', 'SALE_TRANSACTION')")
     description = Column(Text, doc="Description of what this permission allows")
 
     # Relationships
@@ -70,7 +70,7 @@ class Permission(Base): # Permissions also don't need TimestampMixin
         sa.UniqueConstraint('action', 'resource', name='uq_permission_action_resource'),
     )
 
-class RolePermission(Base): # Junction table, no TimestampMixin per schema
+class RolePermission(Base):
     """Junction table linking roles to their permissions."""
     __tablename__ = "role_permissions"
 
@@ -81,16 +81,15 @@ class RolePermission(Base): # Junction table, no TimestampMixin per schema
     role = relationship("Role", back_populates="role_permissions", doc="The role associated with this permission")
     permission = relationship("Permission", back_populates="role_permissions", doc="The permission associated with this role")
 
-class UserRole(Base): # Junction table, no TimestampMixin per schema
+class UserRole(Base):
     """Assigns roles to users, potentially on a per-outlet basis."""
     __tablename__ = "user_roles"
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the user")
     role_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
-    # As per schema, outlet_id is part of PK, thus NOT NULL implicitly.
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="CASCADE"), primary_key=True, nullable=False, doc="Foreign key to the assigned outlet (part of composite PK)")
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the assigned outlet (part of composite PK)")
 
     # Relationships
     user = relationship("User", back_populates="user_roles", doc="The user assigned to this role")
     role = relationship("Role", back_populates="user_roles", doc="The role assigned to this user")
-    outlet = relationship("Outlet", doc="The outlet this role assignment is specific to (if any)") # No back_populates as Outlet.users refers to User, not UserRole. Outlet.user_roles might be added.
+    outlet = relationship("Outlet", doc="The outlet this role assignment is specific to")

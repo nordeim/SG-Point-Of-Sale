@@ -1,12 +1,11 @@
 # File: app/models/product.py
 """SQLAlchemy models for Product and Category entities, and Product Variants and Suppliers."""
 import uuid
-from datetime import datetime
+from decimal import Decimal
 import sqlalchemy as sa
-from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer, Date
+from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
-from decimal import Decimal # NEW: Import Decimal
 
 from app.models.base import Base, TimestampMixin
 
@@ -20,15 +19,13 @@ class Category(Base, TimestampMixin):
     name = Column(String(255), nullable=False, doc="Name of the category")
     
     # Relationships
-    company = relationship("Company", doc="The company this category belongs to") # No back_populates on Company for this; Company has general collections
-    products = relationship("Product", back_populates="category", doc="Products belonging to this category") 
-    parent = relationship("Category", remote_side=[id], backref="children", doc="Parent category for nested categories") # Self-referencing relationship
+    company = relationship("Company")
+    products = relationship("Product", back_populates="category")
+    parent = relationship("Category", remote_side=[id], backref="children", doc="Parent category for nested categories")
 
-    __table_args__ = (
-        sa.UniqueConstraint('company_id', 'name', name='uq_category_company_name'),
-    )
+    __table_args__ = (sa.UniqueConstraint('company_id', 'name', name='uq_category_company_name'),)
 
-class Supplier(Base, TimestampMixin): 
+class Supplier(Base, TimestampMixin):
     """Represents a product supplier."""
     __tablename__ = "suppliers"
 
@@ -41,71 +38,59 @@ class Supplier(Base, TimestampMixin):
     address = Column(Text, doc="Supplier's address")
     is_active = Column(Boolean, nullable=False, default=True, doc="Indicates if the supplier is active")
 
-    # Relationships
     company = relationship("Company", back_populates="suppliers", doc="The company this supplier is associated with")
     products = relationship("Product", back_populates="supplier", doc="Products sourced from this supplier") 
     purchase_orders = relationship("PurchaseOrder", back_populates="supplier", cascade="all, delete-orphan", doc="Purchase orders placed with this supplier")
 
-
-    __table_args__ = (
-        sa.UniqueConstraint('company_id', 'name', name='uq_supplier_company_name'),
-    )
-
+    __table_args__ = (sa.UniqueConstraint('company_id', 'name', name='uq_supplier_company_name'),)
 
 class Product(Base, TimestampMixin):
     """Represents a single product for sale."""
     __tablename__ = "products"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the product")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
-    category_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id"), nullable=True, index=True, doc="Foreign key to the product's category")
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=True, index=True, doc="Foreign key to the product's supplier")
-    sku = Column(String(100), nullable=False, doc="Stock Keeping Unit (unique per company)")
-    barcode = Column(String(100), doc="Product barcode (EAN, UPC, etc.)")
-    name = Column(String(255), nullable=False, doc="Product name")
-    description = Column(Text, doc="Detailed description of the product")
-    cost_price = Column(Numeric(19, 4), nullable=False, default=0, doc="Cost of the product to the business")
-    selling_price = Column(Numeric(19, 4), nullable=False, doc="Retail selling price of the product")
-    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("8.00"), doc="Goods and Services Tax rate applicable to the product (e.g., 8.00 for 8%)")
-    track_inventory = Column(Boolean, nullable=False, default=True, doc="If true, inventory levels for this product are tracked")
-    reorder_point = Column(Integer, nullable=False, default=0, doc="Threshold quantity at which a reorder is suggested")
-    is_active = Column(Boolean, nullable=False, default=True, doc="Indicates if the product is available for sale")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id"), nullable=True, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=True, index=True)
+    sku = Column(String(100), nullable=False)
+    barcode = Column(String(100), index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    cost_price = Column(Numeric(19, 4), nullable=False, default=0)
+    selling_price = Column(Numeric(19, 4), nullable=False)
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("8.00"))
+    track_inventory = Column(Boolean, nullable=False, default=True)
+    reorder_point = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
 
-    # Relationships
-    company = relationship("Company", back_populates="products", doc="The company that owns this product")
-    category = relationship("Category", back_populates="products", doc="The category this product belongs to")
-    supplier = relationship("Supplier", back_populates="products", doc="The primary supplier of this product")
-    product_variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", doc="Variants of this base product")
-    inventory_items = relationship("Inventory", back_populates="product", doc="Inventory records for this product across outlets") 
-    sales_transaction_items = relationship("SalesTransactionItem", back_populates="product", doc="Line items in sales transactions involving this product")
-    purchase_order_items = relationship("PurchaseOrderItem", back_populates="product", doc="Line items in purchase orders involving this product")
-    stock_movements = relationship("StockMovement", back_populates="product", doc="Stock movement records for this product")
+    company = relationship("Company", back_populates="products")
+    category = relationship("Category", back_populates="products")
+    supplier = relationship("Supplier", back_populates="products")
+    product_variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
+    inventory_items = relationship("Inventory", back_populates="product", cascade="all, delete-orphan")
+    sales_transaction_items = relationship("SalesTransactionItem", back_populates="product", cascade="all, delete-orphan")
+    purchase_order_items = relationship("PurchaseOrderItem", back_populates="product", cascade="all, delete-orphan")
+    stock_movements = relationship("StockMovement", back_populates="product", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        sa.UniqueConstraint('company_id', 'sku', name='uq_product_company_sku'),
-        # TODO: Consider adding a unique constraint on barcode per company if needed
-    )
+    __table_args__ = (sa.UniqueConstraint('company_id', 'sku', name='uq_product_company_sku'),)
 
 class ProductVariant(Base, TimestampMixin):
     """Stores variations of a base product, like size or color."""
     __tablename__ = "product_variants"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the product variant")
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="CASCADE"), nullable=False, index=True, doc="Foreign key to the base product")
-    sku_suffix = Column(String(100), nullable=False, doc="Suffix appended to base product SKU to form variant SKU")
-    barcode = Column(String(100), doc="Unique barcode for this specific variant")
-    attributes = Column(JSONB, nullable=False, doc="JSONB object of variant attributes (e.g., {'size': 'L', 'color': 'Red'})")
-    cost_price_override = Column(Numeric(19, 4), nullable=True, doc="Override for base product's cost price for this variant")
-    selling_price_override = Column(Numeric(19, 4), nullable=True, doc="Override for base product's selling price for this variant")
-    is_active = Column(Boolean, nullable=False, default=True, doc="Indicates if this variant is available")
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="CASCADE"), nullable=False, index=True)
+    sku_suffix = Column(String(100), nullable=False)
+    barcode = Column(String(100))
+    attributes = Column(JSONB, nullable=False)
+    cost_price_override = Column(Numeric(19, 4))
+    selling_price_override = Column(Numeric(19, 4))
+    is_active = Column(Boolean, nullable=False, default=True)
     
-    # Relationships
-    product = relationship("Product", back_populates="product_variants", doc="The base product this is a variant of")
-    inventory_items = relationship("Inventory", back_populates="variant", doc="Inventory records for this variant")
-    sales_transaction_items = relationship("SalesTransactionItem", back_populates="variant", doc="Sales items involving this variant")
-    stock_movements = relationship("StockMovement", back_populates="variant", doc="Stock movements involving this variant")
+    product = relationship("Product", back_populates="product_variants")
+    inventory_items = relationship("Inventory", back_populates="variant", cascade="all, delete-orphan")
+    sales_transaction_items = relationship("SalesTransactionItem", back_populates="variant", cascade="all, delete-orphan")
+    stock_movements = relationship("StockMovement", back_populates="variant", cascade="all, delete-orphan")
+    purchase_order_items = relationship("PurchaseOrderItem", back_populates="variant", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        sa.UniqueConstraint('product_id', 'sku_suffix', name='uq_product_variant_sku_suffix'),
-        # TODO: Consider adding unique constraint on barcode per product_id if barcodes are specific to variants
-    )
+    __table_args__ = (sa.UniqueConstraint('product_id', 'sku_suffix', name='uq_product_variant_sku_suffix'),)
