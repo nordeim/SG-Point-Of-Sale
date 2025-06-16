@@ -10,12 +10,12 @@ they are first needed.
 from __future__ import annotations
 from typing import TYPE_CHECKING, AsyncIterator, Dict, Any, Optional
 from contextlib import asynccontextmanager
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession, AsyncEngine
 import sqlalchemy as sa # Import sa for sa.text
 
 from app.core.config import Settings
 from app.core.exceptions import DatabaseConnectionError, CoreException, AsyncBridgeError, ConfigurationError
-from app.core.async_bridge import AsyncWorker, AsyncWorkerThread # NEW: Import AsyncWorker
+from app.core.async_bridge import AsyncWorker, AsyncWorkerThread
 
 import uuid # Import uuid for UUID type conversion
 
@@ -27,12 +27,12 @@ if TYPE_CHECKING:
     from app.services.customer_service import CustomerService
     from app.services.inventory_service import InventoryService
     from app.services.sales_service import SalesService
-    from app.services.payment_service import PaymentMethodService, PaymentService # PaymentMethodService vs PaymentService
+    from app.services.payment_service import PaymentMethodService, PaymentService
     from app.services.supplier_service import SupplierService
     from app.services.purchase_order_service import PurchaseOrderService
     from app.services.report_service import ReportService
-    from app.services.user_service import UserService
-    from app.services.company_service import CompanyService, OutletService # Added Company/Outlet Services
+    from app.services.user_service import UserService, RoleService
+    from app.services.company_service import CompanyService, OutletService
 
     from app.business_logic.managers.product_manager import ProductManager
     from app.business_logic.managers.customer_manager import CustomerManager
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from app.business_logic.managers.gst_manager import GstManager
     from app.business_logic.managers.reporting_manager import ReportingManager
     from app.business_logic.managers.user_manager import UserManager
+    from app.business_logic.managers.company_manager import CompanyManager
     # TODO: Add AccountingManager if it will be a separate entity
 
 
@@ -53,8 +54,8 @@ class ApplicationCore:
     def __init__(self, settings: Settings):
         """Initializes the core with application settings."""
         self.settings = settings
-        self._engine = None
-        self._session_factory = None
+        self._engine: Optional[AsyncEngine] = None
+        self._session_factory: Optional[async_sessionmaker[AsyncSession]] = None
         
         self._managers: Dict[str, Any] = {}
         self._services: Dict[str, Any] = {}
@@ -132,7 +133,7 @@ class ApplicationCore:
             print("Database engine disposed.")
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncSession:
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
         """
         Provides a database session for a single unit of work.
         Handles session lifecycle including commit, rollback, and closing.
@@ -252,7 +253,7 @@ class ApplicationCore:
     def supplier_service(self) -> "SupplierService":
         """Lazy-loaded singleton for SupplierService."""
         if "supplier" not in self._services:
-            from app.services.product_service import SupplierService # Supplier is in product.py so its service might be there
+            from app.services.supplier_service import SupplierService # Local import
             self._services["supplier"] = SupplierService(self)
         return self._services["supplier"]
 
@@ -280,8 +281,24 @@ class ApplicationCore:
             self._services["user"] = UserService(self)
         return self._services["user"]
 
+    @property
+    def role_service(self) -> "RoleService":
+        """Lazy-loaded singleton for RoleService."""
+        if "role" not in self._services:
+            from app.services.user_service import RoleService # Local import
+            self._services["role"] = RoleService(self)
+        return self._services["role"]
+
     # --- Manager Properties (lazy-loaded) ---
     # These properties provide access to the Business Logic Layer managers.
+    @property
+    def company_manager(self) -> "CompanyManager":
+        """Lazy-loaded singleton for CompanyManager."""
+        if "company" not in self._managers:
+            from app.business_logic.managers.company_manager import CompanyManager # Local import
+            self._managers["company"] = CompanyManager(self)
+        return self._managers["company"]
+        
     @property
     def product_manager(self) -> "ProductManager":
         """Lazy-loaded singleton for ProductManager."""
