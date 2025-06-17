@@ -1,46 +1,162 @@
 # File: app/ui/views/product_view.py
 """The main view for managing products."""
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QTableView, QMessageBox
-from PySide6.QtCore import Slot
+from __future__ import annotations
+from typing import List, Any, Optional
+from decimal import Decimal
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableView,
+    QMessageBox, QLineEdit, QHeaderView, QSizePolicy
+)
+from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject
 
 from app.core.application_core import ApplicationCore
+from app.core.result import Success, Failure
+from app.business_logic.dto.product_dto import ProductDTO
 from app.ui.dialogs.product_dialog import ProductDialog
-# We would need a QAbstractTableModel for products here.
-# For simplicity, we'll omit the model implementation in this stage.
+from app.core.async_bridge import AsyncWorker
+
+class ProductTableModel(QAbstractTableModel):
+    """A Qt Table Model for displaying ProductDTOs."""
+    HEADERS = ["SKU", "Name", "Selling Price", "Cost Price", "GST Rate", "Active"]
+
+    def __init__(self, products: List[ProductDTO] = None, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._products = products or []
+
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        return len(self._products)
+
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.HEADERS)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
+        if not index.isValid(): return None
+        product = self._products[index.row()]
+        col = index.column()
+        if role == Qt.DisplayRole:
+            if col == 0: return product.sku
+            if col == 1: return product.name
+            if col == 2: return f"S${product.selling_price:.2f}"
+            if col == 3: return f"S${product.cost_price:.2f}"
+            if col == 4: return f"{product.gst_rate:.2f}%"
+            if col == 5: return "Yes" if product.is_active else "No"
+        if role == Qt.TextAlignmentRole:
+            if col in [2, 3, 4]: return Qt.AlignRight | Qt.AlignVCenter
+            if col == 5: return Qt.AlignCenter
+        return None
+
+    def get_product_at_row(self, row: int) -> Optional[ProductDTO]:
+        return self._products[row] if 0 <= row < len(self._products) else None
+
+    def refresh_data(self, new_products: List[ProductDTO]):
+        self.beginResetModel()
+        self._products = new_products
+        self.endResetModel()
 
 class ProductView(QWidget):
     """A view widget to display and manage the product catalog."""
-    
-    def __init__(self, core: ApplicationCore, parent=None):
+    def __init__(self, core: ApplicationCore, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.core = core
-        
-        # --- Widgets ---
+        self.async_worker: AsyncWorker = core.async_worker
+        self._setup_ui()
+        self._connect_signals()
+        self._load_products()
+
+    def _setup_ui(self):
+        top_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search products by SKU, name, or barcode...")
         self.add_button = QPushButton("Add New Product")
         self.edit_button = QPushButton("Edit Selected")
-        self.delete_button = QPushButton("Delete Selected")
+        self.delete_button = QPushButton("Deactivate Selected")
+        top_layout.addWidget(self.search_input, 1)
+        top_layout.addStretch()
+        top_layout.addWidget(self.add_button)
+        top_layout.addWidget(self.edit_button)
+        top_layout.addWidget(self.delete_button)
+        
         self.table_view = QTableView()
-        # self.table_view.setModel(ProductTableModel(core)) # To be implemented
-        
-        # --- Layout ---
-        layout = QVBoxLayout(self)
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.add_button)
-        button_layout.addWidget(self.edit_button)
-        button_layout.addWidget(self.delete_button)
-        button_layout.addStretch()
-        
-        layout.addLayout(button_layout)
-        layout.addWidget(self.table_view)
+        self.product_model = ProductTableModel()
+        self.table_view.setModel(self.product_model)
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_view.setSelectionBehavior(QTableView.SelectRows)
+        self.table_view.setSelectionMode(QTableView.SingleSelection)
+        self.table_view.setSortingEnabled(True)
 
-        # --- Connections ---
-        self.add_button.clicked.connect(self.open_add_dialog)
+        main_layout = QVBoxLayout(self)
+        main_layout.addLayout(top_layout)
+        main_layout.addWidget(self.table_view)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def _connect_signals(self):
+        self.add_button.clicked.connect(self._on_add_product)
+        self.edit_button.clicked.connect(self._on_edit_product)
+        self.delete_button.clicked.connect(self._on_deactivate_product)
+        self.search_input.textChanged.connect(self._on_search_products)
+        self.table_view.doubleClicked.connect(self._on_edit_product)
+
+    def _get_selected_product(self) -> Optional[ProductDTO]:
+        selected_indexes = self.table_view.selectionModel().selectedRows()
+        return self.product_model.get_product_at_row(selected_indexes[0].row()) if selected_indexes else None
 
     @Slot()
-    def open_add_dialog(self):
-        """Opens the dialog to add a new product."""
+    def _load_products(self, search_term: str = ""):
+        def _on_done(result: Any, error: Optional[Exception]):
+            if error or isinstance(result, Failure):
+                QMessageBox.critical(self, "Load Error", f"Failed to load products: {error or result.error}")
+            elif isinstance(result, Success):
+                self.product_model.refresh_data(result.value)
+        
+        coro = self.core.product_manager.search_products(self.core.current_company_id, search_term) if search_term else self.core.product_manager.get_all_products(self.core.current_company_id)
+        self.async_worker.run_task(coro, _on_done)
+
+    @Slot()
+    def _on_add_product(self):
         dialog = ProductDialog(self.core, parent=self)
-        if dialog.exec():
-            QMessageBox.information(self, "Success", "Product operation successful.")
-            # Here you would refresh the table model
-            # self.table_view.model().refresh()
+        dialog.product_operation_completed.connect(self._handle_operation_completed)
+        dialog.exec()
+
+    @Slot()
+    def _on_edit_product(self):
+        selected_product = self._get_selected_product()
+        if not selected_product:
+            QMessageBox.information(self, "No Selection", "Please select a product to edit.")
+            return
+        dialog = ProductDialog(self.core, product=selected_product, parent=self)
+        dialog.product_operation_completed.connect(self._handle_operation_completed)
+        dialog.exec()
+
+    @Slot()
+    def _on_deactivate_product(self):
+        selected_product = self._get_selected_product()
+        if not selected_product:
+            QMessageBox.information(self, "No Selection", "Please select a product to deactivate.")
+            return
+        
+        reply = QMessageBox.question(self, "Confirm Deactivation", f"Are you sure you want to deactivate '{selected_product.name}'?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.No: return
+
+        def _on_done(result: Any, error: Optional[Exception]):
+            if error or isinstance(result, Failure):
+                QMessageBox.critical(self, "Error", f"Failed to deactivate product: {error or result.error}")
+            elif isinstance(result, Success) and result.value:
+                QMessageBox.information(self, "Success", f"Product '{selected_product.name}' deactivated.")
+                self._load_products(self.search_input.text())
+        
+        self.async_worker.run_task(self.core.product_manager.deactivate_product(selected_product.id), _on_done)
+
+    @Slot(str)
+    def _on_search_products(self, text: str):
+        self._load_products(search_term=text)
+
+    @Slot(bool, str)
+    def _handle_operation_completed(self, success: bool, message: str):
+        if success:
+            self._load_products(self.search_input.text())

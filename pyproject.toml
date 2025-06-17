@@ -1,14 +1,4 @@
-# ==============================================================================
-# pyproject.toml for the SG Point-of-Sale (SG-POS) System
-# ------------------------------------------------------------------------------
-# This file manages the entire project's metadata, dependencies, and development
-# tool configurations using the Poetry build system. It is the single source of
-# truth for setting up the development environment.
-#
-# For more information on the TOML format: https://toml.io
-# For more information on Poetry: https://python-poetry.org
-# ==============================================================================
-
+# pyproject.toml
 [tool.poetry]
 # --- Project Metadata ---
 # This information is used for packaging the application and for display on
@@ -42,7 +32,8 @@ alembic = "^1.13.1"        # For database schema migrations.
 asyncpg = "^0.29.0"        # High-performance asyncio driver for PostgreSQL.
 
 # Data Validation & Settings
-pydantic = "^2.7.1"        # For Data Transfer Objects (DTOs) and settings management.
+pydantic = "^2.7.1"        # For Data Transfer Objects (DTOs) and core validation.
+pydantic-settings = "^2.2.1" # FIX: Added for settings management with Pydantic v2.
 python-dotenv = "^1.0.0"   # For loading environment variables from .env files.
 
 # Security

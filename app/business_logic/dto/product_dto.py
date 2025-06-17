@@ -1,9 +1,6 @@
 # File: app/business_logic/dto/product_dto.py
 """
 Data Transfer Objects (DTOs) for the Product entity.
-
-These models define the data structure for passing product information between
-the different layers of the application, ensuring a clear and validated contract.
 """
 import uuid
 from decimal import Decimal
@@ -17,7 +14,7 @@ class ProductBaseDTO(BaseModel):
     description: Optional[str] = Field(None, description="Detailed description of the product")
     selling_price: Decimal = Field(..., gt=Decimal("0.00"), decimal_places=4, description="The retail price of the product")
     cost_price: Decimal = Field(..., ge=Decimal("0.00"), decimal_places=4, description="The cost of acquiring the product")
-    gst_rate: Decimal = Field(Decimal("8.00"), ge=Decimal("0.00"), le=Decimal("100.00"), decimal_places=2, description="Goods and Services Tax rate (e.g., 8.00 for 8%)")
+    gst_rate: Decimal = Field(Decimal("9.00"), ge=Decimal("0.00"), le=Decimal("100.00"), decimal_places=2, description="Goods and Services Tax rate (e.g., 9.00 for 9%)") # FIX: Updated GST Rate
     track_inventory: bool = True
     is_active: bool = True
     category_id: Optional[uuid.UUID] = Field(None, description="UUID of the product's category")
@@ -25,24 +22,18 @@ class ProductBaseDTO(BaseModel):
     barcode: Optional[str] = Field(None, max_length=100, description="Product barcode (EAN, UPC, etc.)")
     reorder_point: int = Field(0, ge=0, description="Threshold quantity for reordering suggestions")
 
-    # Pydantic validation: selling_price must be >= cost_price
     @validator('selling_price')
     def check_selling_price_not_less_than_cost_price(cls, v, values):
         if 'cost_price' in values and v < values['cost_price']:
             raise ValueError('Selling price cannot be less than cost price.')
         return v
 
-
 class ProductCreateDTO(ProductBaseDTO):
     """DTO for creating a new product."""
-    # Inherits all fields and validations from ProductBaseDTO
     pass
 
 class ProductUpdateDTO(ProductBaseDTO):
     """DTO for updating an existing product."""
-    # Inherits all fields and validations from ProductBaseDTO
-    # Fields can be optional if partial updates are allowed (use Optional[Type] or exclude_unset=True)
-    # For simplicity here, fields are required for update too, unless explicitly marked Optional.
     pass
 
 class ProductDTO(ProductBaseDTO):
@@ -50,4 +41,4 @@ class ProductDTO(ProductBaseDTO):
     id: uuid.UUID = Field(..., description="Unique identifier for the product")
 
     class Config:
-        orm_mode = True # Allows creating DTO from a SQLAlchemy ORM model instance
+        from_attributes = True

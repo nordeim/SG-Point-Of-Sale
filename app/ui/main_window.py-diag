@@ -1,8 +1,8 @@
-# File: app/ui/main_window.py
+# File: app/ui/main_window.py (DIAGNOSTIC VERSION)
 """
 The main window of the SG-POS application.
-This QMainWindow acts as the shell, hosting different views like the POS screen,
-inventory management, etc., and providing navigation.
+This QMainWindow acts as the shell, hosting different views.
+DIAGNOSTIC VERSION: This file will be used to isolate the source of the startup error.
 """
 import sys
 from typing import Optional, Any
@@ -16,17 +16,27 @@ from app.core.application_core import ApplicationCore
 from app.core.async_bridge import AsyncWorker
 
 # Import all views that will be hosted
+print("[DIAGNOSTIC] Importing views...")
 from app.ui.views.pos_view import POSView
+print("[DIAGNOSTIC] ... POSView imported successfully.")
 from app.ui.views.product_view import ProductView
+print("[DIAGNOSTIC] ... ProductView imported successfully.")
 from app.ui.views.customer_view import CustomerView
+print("[DIAGNOSTIC] ... CustomerView imported successfully.")
 from app.ui.views.inventory_view import InventoryView
+print("[DIAGNOSTIC] ... InventoryView imported successfully.")
 from app.ui.views.reports_view import ReportsView
+print("[DIAGNOSTIC] ... ReportsView imported successfully.")
 from app.ui.views.settings_view import SettingsView
+print("[DIAGNOSTIC] ... SettingsView imported successfully.")
+print("[DIAGNOSTIC] All views imported.")
+
 
 class MainWindow(QMainWindow):
     """The main application window."""
     def __init__(self, core: ApplicationCore):
         super().__init__()
+        print("[DIAGNOSTIC] MainWindow.__init__ started.")
         self.core = core
         self.async_worker: AsyncWorker = core.async_worker
         self.setWindowTitle("SG Point-of-Sale System")
@@ -35,23 +45,41 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        # --- Initialize and add all primary views ---
+        # --- Initialize and add all primary views ONE BY ONE ---
+        print("[DIAGNOSTIC] Instantiating POSView...")
         self.pos_view = POSView(self.core)
-        self.product_view = ProductView(self.core)
-        self.customer_view = CustomerView(self.core)
-        self.inventory_view = InventoryView(self.core)
-        self.reports_view = ReportsView(self.core)
-        self.settings_view = SettingsView(self.core)
-
         self.stacked_widget.addWidget(self.pos_view)
+        print("[DIAGNOSTIC] ... POSView instantiated and added.")
+
+        print("[DIAGNOSTIC] Instantiating ProductView...")
+        self.product_view = ProductView(self.core)
         self.stacked_widget.addWidget(self.product_view)
-        self.stacked_widget.addWidget(self.customer_view)
-        self.stacked_widget.addWidget(self.inventory_view)
-        self.stacked_widget.addWidget(self.reports_view)
-        self.stacked_widget.addWidget(self.settings_view)
+        print("[DIAGNOSTIC] ... ProductView instantiated and added.")
         
+        print("[DIAGNOSTIC] Instantiating CustomerView...")
+        self.customer_view = CustomerView(self.core)
+        self.stacked_widget.addWidget(self.customer_view)
+        print("[DIAGNOSTIC] ... CustomerView instantiated and added.")
+        
+        print("[DIAGNOSTIC] Instantiating InventoryView...")
+        self.inventory_view = InventoryView(self.core)
+        self.stacked_widget.addWidget(self.inventory_view)
+        print("[DIAGNOSTIC] ... InventoryView instantiated and added.")
+
+        print("[DIAGNOSTIC] Instantiating ReportsView...")
+        self.reports_view = ReportsView(self.core)
+        self.stacked_widget.addWidget(self.reports_view)
+        print("[DIAGNOSTIC] ... ReportsView instantiated and added.")
+
+        print("[DIAGNOSTIC] Instantiating SettingsView...")
+        self.settings_view = SettingsView(self.core)
+        self.stacked_widget.addWidget(self.settings_view)
+        print("[DIAGNOSTIC] ... SettingsView instantiated and added.")
+        
+        print("[DIAGNOSTIC] All views instantiated and added.")
         self.stacked_widget.setCurrentWidget(self.pos_view)
         self._create_menu()
+        print("[DIAGNOSTIC] MainWindow.__init__ finished.")
 
     def _create_menu(self):
         """Creates the main menu bar with complete navigation."""
@@ -80,6 +108,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QEvent) -> None:
         """Handles window close event to gracefully shut down the application core."""
+        # This is the correct shutdown logic from the previous fix.
         if self.core:
             self.core.shutdown()
         event.accept()
+

@@ -21,13 +21,13 @@ class PaymentInfoDTO(BaseModel):
 
 class SaleCreateDTO(BaseModel):
     """DTO for creating a new sales transaction."""
-    company_id: uuid.UUID = Field(..., description="UUID of the company making the sale")
-    outlet_id: uuid.UUID = Field(..., description="UUID of the outlet where the sale occurred")
-    cashier_id: uuid.UUID = Field(..., description="UUID of the cashier processing the sale")
-    customer_id: Optional[uuid.UUID] = Field(None, description="UUID of the customer (optional)")
-    cart_items: List[CartItemDTO] = Field(..., min_items=1, description="List of items in the cart")
-    payments: List[PaymentInfoDTO] = Field(..., min_items=1, description="List of payments applied to the sale")
-    notes: Optional[str] = Field(None, description="Any notes for the sales transaction")
+    company_id: uuid.UUID
+    outlet_id: uuid.UUID
+    cashier_id: uuid.UUID
+    customer_id: Optional[uuid.UUID] = None
+    cart_items: List[CartItemDTO] = Field(..., min_items=1)
+    payments: List[PaymentInfoDTO] = Field(..., min_items=1)
+    notes: Optional[str] = None
 
 class SalesTransactionItemDTO(BaseModel):
     """DTO for a single item within a finalized sales transaction receipt."""
@@ -38,31 +38,23 @@ class SalesTransactionItemDTO(BaseModel):
     quantity: Decimal = Field(..., decimal_places=4)
     unit_price: Decimal = Field(..., decimal_places=4)
     line_total: Decimal = Field(..., decimal_places=2)
-    gst_rate: Decimal = Field(..., decimal_places=2) # GST rate at the time of sale
+    gst_rate: Decimal = Field(..., decimal_places=2)
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class FinalizedSaleDTO(BaseModel):
     """DTO representing a completed sale, suitable for generating a receipt."""
-    transaction_id: uuid.UUID = Field(..., description="UUID of the finalized sales transaction")
-    transaction_number: str = Field(..., description="Unique transaction number")
-    transaction_date: datetime = Field(..., description="Date and time of the transaction")
-    
-    # Financial summary
-    subtotal: Decimal = Field(..., decimal_places=2, description="Subtotal before tax and discount")
-    tax_amount: Decimal = Field(..., decimal_places=2, description="Total tax amount")
-    discount_amount: Decimal = Field(..., decimal_places=2, description="Total discount amount")
-    rounding_adjustment: Decimal = Field(..., decimal_places=2, description="Rounding adjustment for total")
-    total_amount: Decimal = Field(..., decimal_places=2, description="Final total amount due")
-    
-    # Payment details
-    amount_paid: Decimal = Field(..., decimal_places=2, description="Total amount paid by customer")
-    change_due: Decimal = Field(..., decimal_places=2, description="Change given back to customer")
-
-    # Customer and Cashier info (optional for receipt)
-    customer_name: Optional[str] = Field(None, description="Name of the customer (if associated)")
-    cashier_name: str = Field(..., description="Name of the cashier who processed the sale")
-
-    # Line items for receipt
-    items: List[SalesTransactionItemDTO] = Field(..., description="List of items in the transaction")
+    transaction_id: uuid.UUID
+    transaction_number: str
+    transaction_date: datetime
+    subtotal: Decimal = Field(..., decimal_places=2)
+    tax_amount: Decimal = Field(..., decimal_places=2)
+    discount_amount: Decimal = Field(..., decimal_places=2)
+    rounding_adjustment: Decimal = Field(..., decimal_places=2)
+    total_amount: Decimal = Field(..., decimal_places=2)
+    amount_paid: Decimal = Field(..., decimal_places=2)
+    change_due: Decimal = Field(..., decimal_places=2)
+    customer_name: Optional[str] = None
+    cashier_name: str
+    items: List[SalesTransactionItemDTO]

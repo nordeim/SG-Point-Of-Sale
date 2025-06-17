@@ -9,6 +9,7 @@ from app.core.result import Result, Success, Failure
 from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.user_dto import UserDTO, UserCreateDTO, UserUpdateDTO, RoleDTO
 from app.models import User, Role, UserRole
+from sqlalchemy.orm import selectinload
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -22,7 +23,12 @@ class UserManager(BaseManager):
     def role_service(self) -> "RoleService": return self.core.role_service
 
     def _hash_password(self, password: str) -> str:
+        """Hashes a password using bcrypt."""
         return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def _verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Verifies a plain password against a hashed one."""
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
     async def create_user(self, company_id: UUID, dto: UserCreateDTO) -> Result[UserDTO, str]:
         """Creates a new user and assigns roles."""
@@ -36,16 +42,82 @@ class UserManager(BaseManager):
         try:
             async with self.core.get_session() as session:
                 session.add(new_user)
+                await session.flush()  # Ensures new_user.id is available
+
+                # FIX: Implement role assignment logic
+                for role_id in dto.roles:
+                    # TODO: For multi-outlet scenarios, the DTO should specify the outlet.
+                    # For now, we assign the role for the currently active outlet.
+                    user_role = UserRole(
+                        user_id=new_user.id,
+                        role_id=role_id,
+                        outlet_id=self.core.current_outlet_id
+                    )
+                    session.add(user_role)
+                
                 await session.flush()
-                # TODO: Assign roles to user via UserRole junction table
                 await session.refresh(new_user, attribute_names=['user_roles'])
                 return Success(UserDTO.from_orm(new_user))
         except Exception as e:
             return Failure(f"Database error creating user: {e}")
 
+    async def update_user(self, user_id: UUID, dto: UserUpdateDTO) -> Result[UserDTO, str]:
+        """Updates an existing user's details, password, and roles."""
+        async with self.core.get_session() as session:
+            try:
+                # Use selectinload to fetch user with roles efficiently
+                stmt = select(User).where(User.id == user_id).options(selectinload(User.user_roles))
+                result = await session.execute(stmt)
+                user = result.scalar_one_or_none()
+
+                if not user:
+                    return Failure("User not found.")
+
+                # Update basic user fields
+                update_data = dto.dict(exclude_unset=True, exclude={'password', 'roles'})
+                for key, value in update_data.items():
+                    setattr(user, key, value)
+                
+                # Update password if provided
+                if dto.password:
+                    user.password_hash = self._hash_password(dto.password)
+
+                # Update roles: clear existing roles and add new ones
+                user.user_roles.clear()
+                await session.flush()
+
+                for role_id in dto.roles:
+                    user_role = UserRole(
+                        user_id=user.id,
+                        role_id=role_id,
+                        outlet_id=self.core.current_outlet_id # Assumes update is for current context
+                    )
+                    session.add(user_role)
+                
+                await session.flush()
+                await session.refresh(user, attribute_names=['user_roles'])
+                
+                return Success(UserDTO.from_orm(user))
+            except Exception as e:
+                return Failure(f"Database error updating user: {e}")
+
+    async def deactivate_user(self, user_id: UUID) -> Result[bool, str]:
+        """Deactivates a user (soft delete)."""
+        user_res = await self.user_service.get_by_id(user_id)
+        if isinstance(user_res, Failure): return user_res
+        
+        user = user_res.value
+        if not user: return Failure("User not found.")
+        
+        user.is_active = False
+        update_result = await self.user_service.update(user)
+        if isinstance(update_result, Failure): return update_result
+        
+        return Success(True)
+
     async def get_all_users(self, company_id: UUID) -> Result[List[UserDTO], str]:
         """Retrieves all users for a given company."""
-        res = await self.user_service.get_all(company_id)
+        res = await self.user_service.get_all(company_id, options=[selectinload(User.user_roles).selectinload(UserRole.role)])
         if isinstance(res, Failure): return res
         return Success([UserDTO.from_orm(u) for u in res.value])
 

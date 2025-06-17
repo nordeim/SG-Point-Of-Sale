@@ -21,9 +21,11 @@ class UserUpdateDTO(UserBaseDTO):
 class RoleDTO(BaseModel):
     id: uuid.UUID
     name: str
-    class Config: orm_mode = True
+    class Config:
+        from_attributes = True
 
 class UserDTO(UserBaseDTO):
     id: uuid.UUID
     roles: List[RoleDTO]
-    class Config: orm_mode = True
+    class Config:
+        from_attributes = True

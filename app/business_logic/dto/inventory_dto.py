@@ -24,7 +24,7 @@ class SupplierUpdateDTO(SupplierBaseDTO):
 class SupplierDTO(SupplierBaseDTO):
     id: uuid.UUID
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # --- Purchase Order DTOs ---
 class PurchaseOrderItemCreateDTO(BaseModel):
@@ -54,7 +54,7 @@ class PurchaseOrderItemDTO(BaseModel):
     unit_cost: Decimal = Field(..., decimal_places=4)
     line_total: Decimal = Field(..., decimal_places=2)
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PurchaseOrderDTO(BaseModel):
     id: uuid.UUID
@@ -70,7 +70,7 @@ class PurchaseOrderDTO(BaseModel):
     total_amount: Decimal = Field(..., decimal_places=2)
     items: List[PurchaseOrderItemDTO]
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # --- Stock Adjustment DTO ---
 class StockAdjustmentItemDTO(BaseModel):
@@ -100,7 +100,7 @@ class StockMovementDTO(BaseModel):
     created_by_user_name: Optional[str]
     created_at: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # --- Inventory Summary DTO (for InventoryView display) ---
 class InventorySummaryDTO(BaseModel):
@@ -117,4 +117,4 @@ class InventorySummaryDTO(BaseModel):
     selling_price: Decimal = Field(..., decimal_places=4)
     
     class Config:
-        orm_mode = True
+        from_attributes = True

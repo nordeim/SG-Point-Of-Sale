@@ -30,7 +30,7 @@ class CustomerDTO(CustomerBaseDTO):
     is_active: bool = True
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class LoyaltyPointAdjustmentDTO(BaseModel):
     """DTO for manually adjusting a customer's loyalty points."""
