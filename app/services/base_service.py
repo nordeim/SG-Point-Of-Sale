@@ -44,6 +44,27 @@ class BaseService:
         except Exception as e:
             return Failure(f"Database error fetching {self.model.__tablename__} by ID: {e}")
 
+    async def get_by_ids(self, record_ids: List[UUID]) -> Result[List[ModelType], str]:
+        """
+        Fetches multiple records by a list of primary keys (IDs).
+        
+        Args:
+            record_ids: A list of UUIDs to fetch.
+        
+        Returns:
+            A Success containing a list of model instances, or a Failure.
+        """
+        if not record_ids:
+            return Success([])
+        try:
+            async with self.core.get_session() as session:
+                stmt = select(self.model).where(self.model.id.in_(record_ids))
+                result = await session.execute(stmt)
+                records = result.scalars().all()
+                return Success(records)
+        except Exception as e:
+            return Failure(f"Database error fetching {self.model.__tablename__} by IDs: {e}")
+
     async def get_all(
         self,
         company_id: UUID,

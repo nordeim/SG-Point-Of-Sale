@@ -104,7 +104,7 @@ class SalesManager(BaseManager):
         
         # Fetch all product details in one go for efficiency
         product_ids = [item.product_id for item in dto.cart_items]
-        fetched_products_result = await self.product_service.get_by_ids(product_ids) # Assuming get_by_ids exists
+        fetched_products_result = await self.product_service.get_by_ids(product_ids)
         if isinstance(fetched_products_result, Failure):
             return fetched_products_result
         
