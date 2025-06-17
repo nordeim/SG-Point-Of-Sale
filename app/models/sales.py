@@ -6,6 +6,7 @@ import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
 from app.models.base import Base, TimestampMixin
 
 class SalesTransaction(Base, TimestampMixin):
@@ -30,7 +31,13 @@ class SalesTransaction(Base, TimestampMixin):
     cashier = relationship("User", back_populates="sales_transactions")
     items = relationship("SalesTransactionItem", back_populates="sales_transaction", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="sales_transaction", cascade="all, delete-orphan")
-    journal_entries = relationship("JournalEntry", back_populates="sales_transaction")
+    # FIX: Add explicit primaryjoin to tell SQLAlchemy how to link this to JournalEntry
+    journal_entries = relationship(
+        "JournalEntry",
+        primaryjoin="and_(SalesTransaction.id == foreign(JournalEntry.reference_id), JournalEntry.reference_type == 'SALE')",
+        back_populates="sales_transaction",
+        viewonly=True  # Usually a good idea for such reverse relationships to prevent accidental modifications
+    )
     __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint("status IN ('COMPLETED', 'VOIDED', 'HELD')", name="chk_sales_transaction_status"))
 
 class SalesTransactionItem(Base):
@@ -55,8 +62,6 @@ class PaymentMethod(Base, TimestampMixin):
     name = Column(String(100), nullable=False)
     type = Column(String(50), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     company = relationship("Company", back_populates="payment_methods")
     payments = relationship("Payment", back_populates="payment_method")
     __table_args__ = (sa.UniqueConstraint('company_id', 'name', name='uq_payment_methods_company_name'), sa.CheckConstraint("type IN ('CASH', 'CARD', 'NETS', 'PAYNOW', 'VOUCHER', 'STORE_CREDIT')", name="chk_payment_method_type"))
@@ -69,6 +74,5 @@ class Payment(Base):
     amount = Column(Numeric(19, 2), nullable=False)
     reference_number = Column(String(100))
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     sales_transaction = relationship("SalesTransaction", back_populates="payments")
     payment_method = relationship("PaymentMethod", back_populates="payments")

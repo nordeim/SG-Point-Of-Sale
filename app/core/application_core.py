@@ -3,11 +3,13 @@
 The heart of the application's architecture: The Dependency Injection Container.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, AsyncIterator, Dict, Any, Optional
+from typing import TYPE_CHECKING, AsyncIterator, Dict, Any, Optional, Callable
 from contextlib import asynccontextmanager
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession, AsyncEngine
 import uuid
+
+from PySide6.QtCore import QObject, Slot
 
 from app.core.config import Settings
 from app.core.exceptions import DatabaseConnectionError, CoreException, AsyncBridgeError, ConfigurationError
@@ -33,6 +35,21 @@ if TYPE_CHECKING:
     from app.business_logic.managers.user_manager import UserManager
     from app.business_logic.managers.company_manager import CompanyManager
 
+class CallbackExecutor(QObject):
+    """
+    A simple QObject to execute callbacks on the thread it lives in. This is a
+    robust mechanism for invoking calls from a worker thread onto the main thread.
+    """
+    @Slot(object, object, object)
+    def execute(self, callback: Callable, result: Any, error: Optional[Exception]):
+        """Executes the given callback with the result or error."""
+        if callback:
+            try:
+                callback(result, error)
+            except Exception as e:
+                # To prevent a crash in a callback from crashing the application
+                print(f"Error executing callback {callback.__name__}: {e}")
+
 class ApplicationCore:
     """
     Central DI container providing lazy-loaded access to services and managers.
@@ -45,6 +62,7 @@ class ApplicationCore:
         self._services: Dict[str, Any] = {}
         self._async_worker_thread: Optional[AsyncWorkerThread] = None
         self._async_worker: Optional[AsyncWorker] = None
+        self._callback_executor: Optional[CallbackExecutor] = None
         self._current_company_id: Optional[uuid.UUID] = None
         self._current_outlet_id: Optional[uuid.UUID] = None
         self._current_user_id: Optional[uuid.UUID] = None
@@ -61,7 +79,15 @@ class ApplicationCore:
                 raise AsyncBridgeError("AsyncWorker not initialized within the thread.")
             self._async_worker = self._async_worker_thread.worker
 
+            # Create and connect the callback executor to safely handle calls from the worker thread.
+            self._callback_executor = CallbackExecutor()
+            # Assumes the worker has a signal named 'callback_ready'.
+            self._async_worker.callback_ready.connect(self._callback_executor.execute)
+
             self.async_worker.run_task_and_wait(self._initialize_async_components())
+
+            if not self.settings.CURRENT_COMPANY_ID or not self.settings.CURRENT_OUTLET_ID or not self.settings.CURRENT_USER_ID:
+                 raise ConfigurationError("Required IDs (Company, Outlet, User) are not set in the configuration.")
 
             self._current_company_id = uuid.UUID(self.settings.CURRENT_COMPANY_ID)
             self._current_outlet_id = uuid.UUID(self.settings.CURRENT_OUTLET_ID)

@@ -12,7 +12,7 @@ class UserBaseDTO(BaseModel):
 
 class UserCreateDTO(UserBaseDTO):
     password: str = Field(..., min_length=8, description="User's initial password")
-    roles: List[uuid.UUID] # List of Role IDs to assign
+    roles: List[uuid.UUID]
 
 class UserUpdateDTO(UserBaseDTO):
     password: Optional[str] = Field(None, min_length=8, description="New password (if changing)")

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/12437668/155816353-06634cb6-412d-4858-a4aa-431b017b5c87.png" alt="SG-POS System Logo" width="150"/>
+  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Logo" width="150"/>
 </p>
 
 <h1 align="center">SG Point-of-Sale (SG-POS) System</h1>

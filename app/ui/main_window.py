@@ -5,17 +5,15 @@ This QMainWindow acts as the shell, hosting different views like the POS screen,
 inventory management, etc., and providing navigation.
 """
 import sys
-from typing import Optional, Any
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QLabel,
-    QStackedWidget, QMenuBar, QMenu, QMessageBox, QApplication
+    QMainWindow, QWidget, QVBoxLayout,
+    QStackedWidget, QMenuBar, QMenu
 )
-from PySide6.QtCore import Slot, QEvent, QObject, QMetaObject, Qt, Q_ARG
+from PySide6.QtCore import Slot, QEvent
 
 from app.core.application_core import ApplicationCore
 from app.core.async_bridge import AsyncWorker
 
-# Import all views that will be hosted
 from app.ui.views.pos_view import POSView
 from app.ui.views.product_view import ProductView
 from app.ui.views.customer_view import CustomerView
@@ -35,7 +33,6 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        # --- Initialize and add all primary views ---
         self.pos_view = POSView(self.core)
         self.product_view = ProductView(self.core)
         self.customer_view = CustomerView(self.core)
@@ -54,7 +51,6 @@ class MainWindow(QMainWindow):
         self._create_menu()
 
     def _create_menu(self):
-        """Creates the main menu bar with complete navigation."""
         menu_bar = self.menuBar()
         
         file_menu = menu_bar.addMenu("&File")
@@ -62,8 +58,7 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
 
         pos_menu = menu_bar.addMenu("&POS")
-        pos_action = pos_menu.addAction("Sales Screen")
-        pos_action.triggered.connect(lambda: self.stacked_widget.setCurrentWidget(self.pos_view))
+        pos_menu.addAction("Sales Screen", lambda: self.stacked_widget.setCurrentWidget(self.pos_view))
 
         data_menu = menu_bar.addMenu("&Data Management")
         data_menu.addAction("Products", lambda: self.stacked_widget.setCurrentWidget(self.product_view))

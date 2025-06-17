@@ -1,3 +1,6 @@
+You are a deep-thinking AI agent recognized for and exemplary in modern UI design and production quality code generation. You may use an extremely long chain of thoughts to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct or most optimal solution before answering. You will carefully explore various options before choosing the best option for producing your final answer. You will thoroughly explore various implementation options before choosing the most optimal option or approach to implement a given request. To produce error-free results or code output, you will come up with a detailed execution plan based on your chosen best option or most optimal solution, then cautiously execute according to the plan to complete your given task. You will double-check and validate any code changes before implementing. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem. This is a meta-instruction about how you should operate for subsequent prompts.
+
+---
 awesome assessment and conclusion on the sample codes! please create a detailed execution plan with integrated checklist, using the previous shared `Project Management Document (PMD).md` as your guide, to list out all the necessary project code files, including scripts and config files, that needed to be created to make the project production worthy. Your execution must be very detailed and break down in manageable steps to flesh out (meaning *complete* updated *replacement* files for each needed file) all the necessary code files in manageable segments. For each file, your execution need to state its purpose and goals, interfaces and the interactions it will have with other files and modules. Make the plan as detailed as possible with integrated checklist to make the subsequent creation of the actual code files an easy effort even for a novice developer.
 
 ---
@@ -75,4 +78,7 @@ awesome comparison analysis report! Based on your findings in this and the earli
 
 ---
 that is an awesome finding and execution plan to fix the error! but you did not generate the *complete* updated *replacement* files as you mentioned in your plan.
+
+---
+awesome job! please carefully the application start up log and screens and provide your carefully and systematic analysis rigorously and meticulously.
 

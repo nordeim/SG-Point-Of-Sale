@@ -1,0 +1,56 @@
+$ python3 app/main.py 
+2025-06-17 15:43:41,296 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+2025-06-17 15:43:41,297 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-06-17 15:43:41,299 INFO sqlalchemy.engine.Engine select current_schema()
+2025-06-17 15:43:41,299 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-06-17 15:43:41,301 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2025-06-17 15:43:41,301 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-06-17 15:43:41,303 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:43:41,303 INFO sqlalchemy.engine.Engine SELECT 1
+2025-06-17 15:43:41,303 INFO sqlalchemy.engine.Engine [generated in 0.00016s] ()
+2025-06-17 15:43:41,304 INFO sqlalchemy.engine.Engine ROLLBACK
+2025-06-17 15:43:41,408 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:43:41,544 INFO sqlalchemy.engine.Engine SELECT sgpos.products.id, sgpos.products.company_id, sgpos.products.category_id, sgpos.products.supplier_id, sgpos.products.sku, sgpos.products.barcode, sgpos.products.name, sgpos.products.description, sgpos.products.cost_price, sgpos.products.selling_price, sgpos.products.gst_rate, sgpos.products.track_inventory, sgpos.products.reorder_point, sgpos.products.is_active, sgpos.products.created_at, sgpos.products.updated_at 
+FROM sgpos.products 
+WHERE sgpos.products.company_id = $1::UUID 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2025-06-17 15:43:41,544 INFO sqlalchemy.engine.Engine [generated in 0.00024s] (UUID('00000000-0000-0000-0000-000000000001'), 100, 0)
+2025-06-17 15:43:41,582 INFO sqlalchemy.engine.Engine COMMIT
+2025-06-17 15:43:41,725 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:43:41,728 INFO sqlalchemy.engine.Engine SELECT sgpos.products.id AS product_id, sgpos.products.name AS product_name, sgpos.products.sku, sgpos.products.barcode, sgpos.products.reorder_point, sgpos.products.is_active, sgpos.products.cost_price, sgpos.products.selling_price, coalesce(sgpos.inventory.quantity_on_hand, $1::NUMERIC) AS quantity_on_hand, (SELECT name FROM sgpos.categories WHERE id = products.category_id) AS category_name 
+FROM sgpos.products LEFT OUTER JOIN sgpos.inventory ON sgpos.inventory.product_id = sgpos.products.id AND sgpos.inventory.outlet_id = $2::UUID 
+WHERE sgpos.products.company_id = $3::UUID ORDER BY sgpos.products.name 
+ LIMIT $4::INTEGER OFFSET $5::INTEGER
+2025-06-17 15:43:41,728 INFO sqlalchemy.engine.Engine [generated in 0.00022s] (Decimal('0.0'), UUID('00000000-0000-0000-0000-000000000002'), UUID('00000000-0000-0000-0000-000000000001'), 100, 0)
+2025-06-17 15:43:41,730 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:43:41,733 INFO sqlalchemy.engine.Engine SELECT sgpos.customers.id, sgpos.customers.company_id, sgpos.customers.customer_code, sgpos.customers.name, sgpos.customers.email, sgpos.customers.phone, sgpos.customers.address, sgpos.customers.loyalty_points, sgpos.customers.credit_limit, sgpos.customers.is_active, sgpos.customers.created_at, sgpos.customers.updated_at 
+FROM sgpos.customers 
+WHERE sgpos.customers.company_id = $1::UUID 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2025-06-17 15:43:41,733 INFO sqlalchemy.engine.Engine [generated in 0.00020s] (UUID('00000000-0000-0000-0000-000000000001'), 100, 0)
+2025-06-17 15:43:41,737 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:43:41,740 INFO sqlalchemy.engine.Engine SELECT sgpos.users.id, sgpos.users.company_id, sgpos.users.username, sgpos.users.email, sgpos.users.password_hash, sgpos.users.full_name, sgpos.users.is_active, sgpos.users.last_login_at, sgpos.users.created_at, sgpos.users.updated_at 
+FROM sgpos.users 
+WHERE sgpos.users.company_id = $1::UUID 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2025-06-17 15:43:41,740 INFO sqlalchemy.engine.Engine [generated in 0.00020s] (UUID('00000000-0000-0000-0000-000000000001'), 100, 0)
+2025-06-17 15:43:41,741 INFO sqlalchemy.engine.Engine COMMIT
+2025-06-17 15:43:41,741 INFO sqlalchemy.engine.Engine COMMIT
+2025-06-17 15:43:41,745 INFO sqlalchemy.engine.Engine COMMIT
+2025-06-17 15:44:52,649 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:44:52,651 INFO sqlalchemy.engine.Engine SELECT sgpos.purchase_orders.id, sgpos.purchase_orders.company_id, sgpos.purchase_orders.outlet_id, sgpos.purchase_orders.supplier_id, sgpos.purchase_orders.po_number, sgpos.purchase_orders.order_date, sgpos.purchase_orders.expected_delivery_date, sgpos.purchase_orders.status, sgpos.purchase_orders.notes, sgpos.purchase_orders.total_amount, sgpos.purchase_orders.created_at, sgpos.purchase_orders.updated_at 
+FROM sgpos.purchase_orders 
+WHERE sgpos.purchase_orders.company_id = $1::UUID AND sgpos.purchase_orders.outlet_id = $2::UUID 
+ LIMIT $3::INTEGER OFFSET $4::INTEGER
+2025-06-17 15:44:52,651 INFO sqlalchemy.engine.Engine [generated in 0.00016s] (UUID('00000000-0000-0000-0000-000000000001'), UUID('00000000-0000-0000-0000-000000000002'), 100, 0)
+2025-06-17 15:44:52,736 INFO sqlalchemy.engine.Engine COMMIT
+2025-06-17 15:44:55,544 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-06-17 15:44:55,545 INFO sqlalchemy.engine.Engine SELECT sgpos.products.id AS product_id, sgpos.products.name AS product_name, sgpos.products.sku, sgpos.products.barcode, sgpos.products.reorder_point, sgpos.products.is_active, sgpos.products.cost_price, sgpos.products.selling_price, coalesce(sgpos.inventory.quantity_on_hand, $1::NUMERIC) AS quantity_on_hand, (SELECT name FROM sgpos.categories WHERE id = products.category_id) AS category_name 
+FROM sgpos.products LEFT OUTER JOIN sgpos.inventory ON sgpos.inventory.product_id = sgpos.products.id AND sgpos.inventory.outlet_id = $2::UUID 
+WHERE sgpos.products.company_id = $3::UUID ORDER BY sgpos.products.name 
+ LIMIT $4::INTEGER OFFSET $5::INTEGER
+2025-06-17 15:44:55,545 INFO sqlalchemy.engine.Engine [cached since 73.82s ago] (Decimal('0.0'), UUID('00000000-0000-0000-0000-000000000002'), UUID('00000000-0000-0000-0000-000000000001'), 100, 0)
+2025-06-17 15:44:55,559 INFO sqlalchemy.engine.Engine COMMIT
+Shutting down core resources...
+Shutdown complete.
+

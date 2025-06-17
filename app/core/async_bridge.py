@@ -10,7 +10,7 @@ import inspect
 import sys
 from concurrent.futures import Future
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, QMetaObject, Qt, Q_ARG
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from app.core.exceptions import AsyncBridgeError
@@ -20,7 +20,9 @@ class AsyncWorker(QObject):
     An object that lives in a QThread and runs an asyncio event loop.
     It accepts coroutines for execution and signals results back to the main thread.
     """
-    task_finished = Signal(object, object)
+    # FIX: A new signal specifically to carry the callback and its results
+    # This is the key to safe, cross-thread callback invocation.
+    callback_ready = Signal(object, object, object)
 
     def __init__(self, loop: asyncio.AbstractEventLoop, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -75,17 +77,10 @@ class AsyncWorker(QObject):
         except Exception as e:
             error = e
         
-        # This is a general signal for any task completion, can be used for global indicators.
-        self.task_finished.emit(result, error)
-        
-        # This invokes the specific callback provided by the caller UI component.
         if on_done_callback:
-            owner = getattr(on_done_callback, '__self__', QApplication.instance())
-            method_name = on_done_callback.__name__.encode('utf-8')
-            # FIX: Use Q_ARG() factory function instead of QGenericArgument class constructor.
-            QMetaObject.invokeMethod(owner, method_name, Qt.QueuedConnection,
-                                     Q_ARG(object, result),
-                                     Q_ARG(object, error))
+            # FIX: Emit a signal containing the callback and its arguments.
+            # This is thread-safe and lets the main thread execute the callback.
+            self.callback_ready.emit(on_done_callback, result, error)
 
 class AsyncWorkerThread(QThread):
     """A QThread that manages an asyncio event loop and an AsyncWorker."""
@@ -99,6 +94,7 @@ class AsyncWorkerThread(QThread):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.worker = AsyncWorker(self.loop)
+        # The worker's signals will be connected from the main thread after it starts.
         self._thread_started_event.set()
         self.loop.run_forever()
         self.loop.close()

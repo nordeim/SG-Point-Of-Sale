@@ -6,7 +6,7 @@ This provides a consistent interface and reusable logic for common CRUD
 operations, reducing boilerplate code in concrete service implementations.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, Type, TypeVar, List
+from typing import TYPE_CHECKING, Type, TypeVar, List, Optional, Any
 from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.future import select
@@ -34,11 +34,6 @@ class BaseService:
     async def get_by_id(self, record_id: UUID) -> Result[ModelType | None, str]:
         """
         Fetches a single record by its primary key (ID).
-        Args:
-            record_id: The UUID of the record to fetch.
-        Returns:
-            A Success containing the model instance or None if not found,
-            or a Failure with an error message.
         """
         try:
             async with self.core.get_session() as session:
@@ -49,22 +44,41 @@ class BaseService:
         except Exception as e:
             return Failure(f"Database error fetching {self.model.__tablename__} by ID: {e}")
 
-    async def get_all(self, company_id: UUID, limit: int = 100, offset: int = 0) -> Result[List[ModelType], str]:
+    async def get_all(
+        self,
+        company_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+        options: Optional[List] = None,
+        **kwargs: Any
+    ) -> Result[List[ModelType], str]:
         """
-        Fetches all records for the model with pagination, filtered by company_id.
+        Fetches all records for the model with pagination and dynamic filtering.
+        
         Args:
             company_id: The UUID of the company to filter by.
             limit: Maximum number of records to return.
             offset: Number of records to skip.
+            options: A list of SQLAlchemy loader options (e.g., for eager loading).
+            **kwargs: Additional filter conditions where key is a column name.
+        
         Returns:
-            A Success containing a list of model instances,
-            or a Failure with an error message.
+            A Success containing a list of model instances, or a Failure.
         """
         try:
             async with self.core.get_session() as session:
                 stmt = select(self.model).where(self.model.company_id == company_id).offset(offset).limit(limit)
+                
+                # FIX: Dynamically apply filters from kwargs
+                for key, value in kwargs.items():
+                    if hasattr(self.model, key) and value is not None:
+                        stmt = stmt.where(getattr(self.model, key) == value)
+
+                if options:
+                    stmt = stmt.options(*options)
+
                 result = await session.execute(stmt)
-                records = result.scalars().all()
+                records = result.scalars().unique().all()
                 return Success(records)
         except Exception as e:
             return Failure(f"Database error fetching all {self.model.__tablename__}: {e}")
@@ -72,17 +86,12 @@ class BaseService:
     async def create(self, model_instance: ModelType) -> Result[ModelType, str]:
         """
         Saves a new model instance to the database.
-        Args:
-            model_instance: The ORM model instance to create.
-        Returns:
-            A Success containing the created model instance (with ID if newly generated),
-            or a Failure with an error message.
         """
         try:
             async with self.core.get_session() as session:
                 session.add(model_instance)
-                await session.flush()  # Use flush to get generated IDs (e.g., UUID)
-                await session.refresh(model_instance) # Refresh to load default values from DB
+                await session.flush()
+                await session.refresh(model_instance)
                 return Success(model_instance)
         except sa.exc.IntegrityError as e:
             return Failure(f"Data integrity error creating {self.model.__tablename__}: Duplicate entry or missing reference. Details: {e.orig}")
@@ -92,15 +101,9 @@ class BaseService:
     async def update(self, model_instance: ModelType) -> Result[ModelType, str]:
         """
         Updates an existing model instance in the database.
-        Args:
-            model_instance: The ORM model instance to update (must have ID set).
-        Returns:
-            A Success containing the updated model instance,
-            or a Failure with an error message.
         """
         try:
             async with self.core.get_session() as session:
-                # Merge the detached instance into the current session if it's not already
                 session.add(model_instance) 
                 await session.flush()
                 await session.refresh(model_instance)
@@ -111,11 +114,6 @@ class BaseService:
     async def delete(self, record_id: UUID) -> Result[bool, str]:
         """
         Deletes a record by its ID.
-        Args:
-            record_id: The UUID of the record to delete.
-        Returns:
-            A Success indicating True if deleted, False if not found,
-            or a Failure with an error message.
         """
         try:
             async with self.core.get_session() as session:
@@ -125,7 +123,7 @@ class BaseService:
                 if record:
                     await session.delete(record)
                     return Success(True)
-                return Success(False) # Record not found
+                return Success(False)
         except sa.exc.IntegrityError as e:
             return Failure(f"Cannot delete {self.model.__tablename__}: It is referenced by other records. (Integrity error: {e.orig})")
         except Exception as e:
