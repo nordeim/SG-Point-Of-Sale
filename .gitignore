@@ -53,6 +53,7 @@ htmlcov/
 .idea/
 *.sublime-project
 *.sublime-workspace
+ttt4/
 
 # Logs
 *.log

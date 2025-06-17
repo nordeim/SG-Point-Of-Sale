@@ -49,3 +49,27 @@ awesome job! keep up the same rigorous and meticulous approach to systematically
 ---
 awesome job! now help me create a detailed deployment guide to give step by step instructions to setup a UAT (User Acceptance Test) environment starting with this GitHub repository. use 6000 words to create a complete deployment guide in markdown format, that provides very complete and clear instructions for the steps to setup a new environment from the codebase in this GitHub repository. be systematic and logical in your instruction steps. Thank you and good luck!
 
+---
+awesome job! please continue to use the same rigorous and meticulous approach to think deeply and systematically using extremely long chain of thought to thoroughly and carefully explore various implementation options, evaluate thoroughly the options, then choose the most optimal implementation option to formulate and provide your answer or solution or propose any code changes in response to my question or query. Also always generate a *complete* updated *replacement* file for each new or existing files that need updating or modification. After generating the complete and updated replacement for each file, use line by line "diff" command to compare the newly generated file against the existing version to ensure that the changes are correct and valid and that no other original features or functions have been omitted or regression errors introduced. Do the line by line "diff" comparison for each file generated. After all the necessary files have been generated and validated, then give your assessment and conclusion as final completion of your given task. Take this methodology seriously as your meta-instruction going forward so that absolute code quality is ensured. 
+
+Now help me to carefully review the project codebase attached as `currect_project_file_structure.txt` (listing of codebase file structure hierarchy) project_codebase_files_set.md (all existing codebase files enclosed). Evaluate and validate each codebase file attached line by line carefully. At the end of the careful review and validation of the entire codebase attached here, you should have a deep and thorough understanding of the purpose and current state of the project. Then create a detailed code review document in markdown format to clearly, thoroughly and logically describe your code review process, your current view / understanding of the entire codebase (using a diagram to clearly and logically illustrate the codebase hierarchy), describe how the various files and modules interact with each other, follow by your assessment and findings of the codebase (detailing any coding or logic errors, quality or other issues discovered), follow by your conclusion and recommendations.
+
+---
+QA has performed a deep and thorough analysis of the current codebase and identified some issues that need you to think carefully how to address them systematically:
+
+---
+You have done yet another awesome job with your careful and thorough code review and analysis! now help me create a complete updated *replacement* for `README.md`  that describe and represent the current codebase more accurately, also add the following sections at appropriate point / sequence:
+
+1. add / update a section to show / describe the project codebase file hierarchy
+2. add / update a section for a flowchart diagram to describe the interactions between various files and modules
+3. add / update a section to list and describe the files in the codebase file hierarchy 
+4. Current features implemented (partially or fully), Roadmap for suggested improvements divided into two sections, one for the immediate and one for the long-term goals.
+5. Clear and detailed deployment guide starting from the GitHub repository, specify how to install, setup and configure the POS machine to run the code and how to do the same for the database server (docker)
+6. add / update a section for user guide on how to use and run the program (application). 
+
+---
+Awesome job! now carefully review the attached `Execution Plan.md` that was used to produce the current codebase. I want you to use line by line comparison to validate the current codebase against the original execution plan, then create a detailed assessment report in markdown format with at least 6000 words, to describe your comparison analysis and findings between the current (resulting) codebase against the execution plan shared, highlighting any gap or discrepancy discovered in your very careful and systematic analysis using line by line comparison. If a current code file is validated to be syntactically correct implementation of the intent of the file, then it is considered passed (OK). Note that the execution plan is meant to be a guide to create the actual code and config files for the project.  
+
+---
+awesome comparison analysis report! Based on your findings in this and the earlier "current codebase validation" report, please create a detailed execution plan with integrated checklist to systematically and logically create a *complete* and updated *replacement* file for those files that need to be modified to address the issues that you have identified that will prevent the project to be production worthy.
+
