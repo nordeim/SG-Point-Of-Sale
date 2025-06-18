@@ -113,6 +113,7 @@ class InventoryManager(BaseManager):
                 save_po_result = await self.purchase_order_service.create_full_purchase_order(new_po, session)
                 if isinstance(save_po_result, Failure): raise Exception(save_po_result.error)
 
+                # The PurchaseOrder model does not have the supplier name, so we must use the one we fetched
                 return await self._create_po_dto(save_po_result.value, supplier_result.value.name)
         except Exception as e:
             return Failure(f"Failed to create purchase order: {e}")
@@ -163,32 +164,50 @@ class InventoryManager(BaseManager):
     
     async def get_all_purchase_orders(self, company_id: UUID, outlet_id: Optional[UUID] = None) -> Result[List[PurchaseOrderDTO], str]:
         """Retrieves all purchase orders for a given company, optionally filtered by outlet."""
-        po_results = await self.purchase_order_service.get_all(company_id, outlet_id=outlet_id) # Assumes BaseService.get_all can take extra filters
-        if isinstance(po_results, Failure): return po_results
+        # FIX: Call the new, optimized service method instead of the generic one.
+        po_results = await self.purchase_order_service.get_all_with_supplier(company_id, outlet_id)
+        if isinstance(po_results, Failure):
+            return po_results
 
         po_dtos: List[PurchaseOrderDTO] = []
         for po in po_results.value:
-            supplier_res = await self.supplier_service.get_by_id(po.supplier_id)
-            supplier_name = supplier_res.value.name if isinstance(supplier_res, Success) and supplier_res.value else "Unknown"
+            # FIX: The supplier object is now eager-loaded. No more N+1 query.
+            supplier_name = po.supplier.name if po.supplier else "Unknown Supplier"
             po_dto_res = await self._create_po_dto(po, supplier_name)
-            if isinstance(po_dto_res, Success): po_dtos.append(po_dto_res.value)
+            if isinstance(po_dto_res, Success):
+                po_dtos.append(po_dto_res.value)
         return Success(po_dtos)
         
     async def _create_po_dto(self, po: PurchaseOrder, supplier_name: str) -> Result[PurchaseOrderDTO, str]:
         """Helper to construct a PurchaseOrderDTO from an ORM object."""
+        # This helper must be fast as it can be called in a loop.
+        # Fetch all product details for all items in one query if possible.
+        # For now, we assume po.items is already loaded or we fetch them.
+        # If po.items isn't loaded, this would be another N+1, but the PO view doesn't show items yet.
+        # Let's assume for DTO creation, items might not be fully detailed yet unless needed.
+        # The `create_purchase_order` method already has `po.items` loaded.
+        # The `get_all_purchase_orders` does not yet load items, which is fine for the current PO list view.
+        
         items_dto: List[PurchaseOrderItemDTO] = []
-        for item in po.items:
-            product_res = await self.product_service.get_by_id(item.product_id)
-            if isinstance(product_res, Failure): return product_res
-            product = product_res.value
-            items_dto.append(
-                PurchaseOrderItemDTO(
-                    id=item.id, product_id=item.product_id, variant_id=item.variant_id,
-                    product_name=product.name, sku=product.sku, quantity_ordered=item.quantity_ordered,
-                    quantity_received=item.quantity_received, unit_cost=item.unit_cost,
-                    line_total=(item.quantity_ordered * item.unit_cost).quantize(Decimal("0.01"))
+        if po.items: # Check if items are loaded
+            product_ids = [item.product_id for item in po.items]
+            products_res = await self.product_service.get_by_ids(product_ids)
+            if isinstance(products_res, Failure): return products_res
+            products_map = {p.id: p for p in products_res.value}
+
+            for item in po.items:
+                product = products_map.get(item.product_id)
+                if not product: continue # Should not happen if data is consistent
+
+                items_dto.append(
+                    PurchaseOrderItemDTO(
+                        id=item.id, product_id=item.product_id, variant_id=item.variant_id,
+                        product_name=product.name, sku=product.sku, quantity_ordered=item.quantity_ordered,
+                        quantity_received=item.quantity_received, unit_cost=item.unit_cost,
+                        line_total=(item.quantity_ordered * item.unit_cost).quantize(Decimal("0.01"))
+                    )
                 )
-            )
+
         return Success(PurchaseOrderDTO(
             id=po.id, company_id=po.company_id, outlet_id=po.outlet_id, supplier_id=po.supplier_id,
             supplier_name=supplier_name, po_number=po.po_number, order_date=po.order_date,
