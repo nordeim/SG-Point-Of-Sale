@@ -20,6 +20,23 @@ Awesome job! Now help me to carefully review and validate the application codeba
 Awesome job! Now, please create a detailed step-by-step deployment guide document named `Deployment Guide.md` in markdown format to clearly and logically layout how to deploy your latest (updated) application code files and schema. Include a section to show the complete project file directory structure for the latest code version, include file names in the file structure. Please review your latest generated code files and then plan first before creating the  `deployment_guide.md` with accurate up-to-date project state. Use at least 5000 words. The step-by-step guide should start from a base Ubuntu Linux 24.04.01 install, it should be complete until the application can be launched, including how to launch and run the application. Include a section for a backup guide. Be detailed and clear and logical that even someone non IT savvy can easily follow.
 
 ---
+Below is the methodology to create a corrected version of the initial Alembic migration file, `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`, which was auto-generated and now needs to be fixed to match the current ORM models, specifically addressing **Critical Issue #1: Schema Mismatch between ORM and Alembic Migration**.
+
+### 1. Deeply Understand the Goal
+
+I want a file that, when `alembic upgrade head` is run on an empty database, creates a schema that perfectly matches the one defined by the SQLAlchemy models in `app/models/`.
+
+### 2. Systematic Diagnosis & Analysis of Discrepancies
+
+You will compare three sources of truth:
+1.  **The Flawed Migration (`migrations/versions/d5a6759ef2f7_initial_schema_setup.py`):** This is the file to be replaced.
+2.  **The ORM Models (`app/models/*.py`):** This is the *desired state*. This is the ultimate source of truth for the application logic.
+3.  **The SQL Schema (`scripts/database/schema.sql`):** This is a helpful, human-readable reference for the desired state, which seems more up-to-date than the flawed migration.
+
+---
+awesome job! now please give me a step by step guide on how to update the actual database schema using the updated `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`.
+
+---
 awesome job! please continue to use the same rigorous and meticulous approach to think deeply and systematically using extremely long chain of thought to thoroughly and carefully explore various implementation options, evaluate thoroughly the options, then choose the most optimal implementation option to formulate and provide your answer or solution or propose any code changes in response to my question or query. Also always generate a *complete* updated *replacement* file for each new or existing files that need updating or modification. After generating the complete and updated replacement for each file, use line by line "diff" command to compare the newly generated file against the existing version to ensure that the changes are correct and valid and that no other original features or functions have been omitted or regression errors introduced. Do the line by line "diff" comparison for each file generated. After all the necessary files have been generated and validated, then give your assessment and conclusion as final completion of your given task. Take this methodology seriously as your meta-instruction going forward so that absolute code quality is ensured. 
 
 Now help me to carefully review the project codebase attached as `currect_project_file_structure.txt` (listing of codebase file structure hierarchy) project_codebase_files_set.md (all existing codebase files enclosed). Evaluate and validate each codebase file attached line by line carefully. At the end of the careful review and validation of the entire codebase attached here, you should have a deep and thorough understanding of the purpose and current state of the project. Then create a detailed code review document in markdown format to clearly, thoroughly and logically describe your code review process, your current view / understanding of the entire codebase (using a diagram to clearly and logically illustrate the codebase hierarchy), describe how the various files and modules interact with each other, follow by your assessment and findings of the codebase (detailing any coding or logic errors, quality or other issues discovered), follow by your conclusion and recommendations.
