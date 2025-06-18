@@ -56,4 +56,4 @@ class JournalEntryLine(Base, TimestampMixin):
     description = Column(Text)
     journal_entry = relationship("JournalEntry", back_populates="journal_entry_lines")
     account = relationship("ChartOfAccount", back_populates="journal_entry_lines")
-    __table_args__ = (sa.CheckConstraint("(debit_amount >= 0 AND credit_amount >= 0) AND (debit_amount != credit_amount)", name="debit_or_credit_check"),)
+    __table_args__ = (sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name="debit_or_credit_check"),)

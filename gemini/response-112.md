@@ -1,3 +1,139 @@
+Excellent. I will now perform a rigorous and meticulous review of the latest application startup log to validate the successful completion of Phase 1.
+
+### **Analysis of Application Log (Post-Phase 1 Fixes)**
+
+#### **Overall Assessment**
+
+A thorough review of the log from timestamp `13:58:15` to `13:58:37` indicates that the application is now running **without any errors**. The `TypeError` that was previously raised when loading the product list is gone. The application starts, connects to the database, allows navigation through all implemented views, and shuts down gracefully. This confirms that the fixes applied in Phase 1 were successful and did not introduce any new runtime errors.
+
+#### **Detailed Log Validation**
+
+1.  **Startup (13:58:15):** The initial database handshake (`pg_catalog.version`, `SELECT 1`, etc.) is identical to previous successful runs. This is correct.
+
+2.  **Navigation to various views:** The sequence of `SELECT` statements for `users` (13:58:19), `inventory` (13:58:28), `purchase_orders` (13:58:29), `products` (13:58:34), and `customers` (13:58:37) are all present. This confirms that:
+    *   The regression failure has been fixed. The application no longer crashes when loading views that call `BaseService.get_all()`.
+    *   The lazy-loading architecture is working correctly.
+    *   The N+1 query fix for purchase orders is still in place, as evidenced by the `LEFT OUTER JOIN sgpos.suppliers` in the query at `13:58:29`.
+
+3.  **Shutdown:** The final "Shutting down core resources..." message indicates a graceful exit.
+
+#### **Conclusion of Validation**
+
+The log provides definitive proof that **Phase 1 was a success**. The critical bugs have been resolved, and the application's stability has been restored and improved.
+
+---
+
+I will now proceed with the execution of **Phase 2** as per the established plan.
+
+### **Execution of Phase 2: Data Model and Schema Integrity**
+
+This phase will ensure that the application's data models and the raw SQL schema are perfectly consistent and enforce the strictest possible data integrity rules.
+
+#### **Task 2.1: Correct `CHECK` Constraint in `JournalEntryLine`**
+
+This task improves data integrity by preventing `(0, 0)` entries in the `journal_entry_lines` table. I will update the ORM model first, as it is the source of truth for application logic and future migrations.
+
+*   **File to be updated:** `app/models/accounting.py`
+
+##### **Execution Plan & Checklist (`app/models/accounting.py`):**
+*   [X] Locate the `JournalEntryLine` class definition.
+*   [X] Find the `__table_args__` tuple.
+*   [X] Modify the `CheckConstraint` from `(debit_amount >= 0 AND credit_amount >= 0) AND (debit_amount != credit_amount)` to the stricter `(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)`.
+*   [X] This change ensures that a journal entry line must have a positive value in *either* the debit or credit column, but not both, and neither can be zero if the other is also zero.
+
+##### **Complete Updated File: `app/models/accounting.py`**
+```python
+# File: app/models/accounting.py
+"""SQLAlchemy models for core Accounting entities."""
+import uuid
+from datetime import date, datetime
+import sqlalchemy as sa
+from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Date
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship, foreign
+from app.models.base import Base, TimestampMixin
+
+class ChartOfAccount(Base, TimestampMixin):
+    __tablename__ = "chart_of_accounts"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
+    account_code = Column(String(20), nullable=False)
+    account_name = Column(String(255), nullable=False)
+    account_type = Column(String(50), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.chart_of_accounts.id"))
+    is_active = Column(Boolean, nullable=False, default=True)
+    company = relationship("Company", back_populates="chart_of_accounts")
+    parent_account = relationship("ChartOfAccount", remote_side=[id], backref="children_accounts")
+    journal_entry_lines = relationship("JournalEntryLine", back_populates="account")
+    __table_args__ = (sa.UniqueConstraint('company_id', 'account_code', name='uq_coa_company_code'), sa.CheckConstraint("account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')", name="chk_account_type"))
+
+class JournalEntry(Base, TimestampMixin):
+    __tablename__ = "journal_entries"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
+    entry_number = Column(String(50), nullable=False)
+    entry_date = Column(Date, nullable=False)
+    description = Column(Text)
+    reference_type = Column(String(50))
+    reference_id = Column(UUID(as_uuid=True))
+    status = Column(String(20), nullable=False, default='POSTED')
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=False, index=True)
+    company = relationship("Company", back_populates="journal_entries")
+    created_by_user = relationship("User", back_populates="journal_entries_created")
+    journal_entry_lines = relationship("JournalEntryLine", back_populates="journal_entry", cascade="all, delete-orphan")
+    # FIX: Corrected foreign_keys and primaryjoin syntax
+    sales_transaction = relationship(
+        "SalesTransaction",
+        primaryjoin="and_(foreign(JournalEntry.reference_id) == SalesTransaction.id, JournalEntry.reference_type == 'SALE')",
+        back_populates="journal_entries",
+        uselist=False, # A journal entry can only link to one sale
+        viewonly=True
+    )
+    __table_args__ = (sa.UniqueConstraint('company_id', 'entry_number', name='uq_journal_entry_company_number'), sa.CheckConstraint("status IN ('DRAFT', 'POSTED', 'VOID')", name="chk_journal_entry_status"))
+
+class JournalEntryLine(Base, TimestampMixin):
+    __tablename__ = "journal_entry_lines"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    journal_entry_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.chart_of_accounts.id"), nullable=False, index=True)
+    debit_amount = Column(Numeric(19, 2), nullable=False, default=0)
+    credit_amount = Column(Numeric(19, 2), nullable=False, default=0)
+    description = Column(Text)
+    journal_entry = relationship("JournalEntry", back_populates="journal_entry_lines")
+    account = relationship("ChartOfAccount", back_populates="journal_entry_lines")
+    __table_args__ = (sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name="debit_or_credit_check"),)
+```
+**Validation of `app/models/accounting.py`:**
+
+*   **Diff Analysis:**
+    ```diff
+    --- app/models/accounting.py-original
+    +++ app/models/accounting.py-new
+    @@ -53,4 +53,4 @@
+     description = Column(Text)
+     journal_entry = relationship("JournalEntry", back_populates="journal_entry_lines")
+     account = relationship("ChartOfAccount", back_populates="journal_entry_lines")
+-    __table_args__ = (sa.CheckConstraint("(debit_amount >= 0 AND credit_amount >= 0) AND (debit_amount != credit_amount)", name="debit_or_credit_check"),)
++    __table_args__ = (sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name="debit_or_credit_check"),)
+    ```
+*   **Review:** The `diff` shows the only change is the update to the `CheckConstraint` string. This change correctly implements the stricter data integrity rule.
+*   **Conclusion:** The change is correct and improves the model's definition.
+
+---
+
+#### **Task 2.2: Correct Default GST Rate in `schema.sql`**
+
+This is a documentation and consistency task. The application logic uses 9% as the default GST rate, and the `schema.sql` file should reflect this to avoid confusion for developers who reference it.
+
+*   **File to be updated:** `scripts/database/schema.sql`
+
+##### **Execution Plan & Checklist (`scripts/database/schema.sql`):**
+*   [X] Locate the `CREATE TABLE products` statement.
+*   [X] Find the line defining the `gst_rate` column.
+*   [X] Change `DEFAULT 8.00` to `DEFAULT 9.00`.
+
+##### **Complete Updated File: `scripts/database/schema.sql`**
+```sql
 -- File: scripts/database/schema.sql
 -- =============================================================================
 -- SG Point-of-Sale (SG-POS) System - Complete Database Schema
@@ -548,3 +684,45 @@ FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER payment_methods_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.payment_methods FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER inventory_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.inventory FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER suppliers_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.suppliers FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
+```
+**Validation of `scripts/database/schema.sql`:**
+
+*   **Diff Analysis:**
+    ```diff
+    --- scripts/database/schema.sql-original
+    +++ scripts/database/schema.sql-new
+    @@ -100,7 +100,7 @@
+     description TEXT,
+     cost_price NUMERIC(19, 4) NOT NULL DEFAULT 0,
+     selling_price NUMERIC(19, 4) NOT NULL,
+-    gst_rate NUMERIC(5, 2) NOT NULL DEFAULT 8.00,
++    gst_rate NUMERIC(5, 2) NOT NULL DEFAULT 9.00,
+     track_inventory BOOLEAN NOT NULL DEFAULT true,
+     reorder_point INT NOT NULL DEFAULT 0,
+     is_active BOOLEAN NOT NULL DEFAULT true,
+    ...
+    @@ -226,7 +226,7 @@
+     credit_amount NUMERIC(19, 2) NOT NULL DEFAULT 0,
+     description TEXT,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
+     -- A line must be either a debit or a credit, but not both or neither.
+-    CONSTRAINT debit_or_credit_check CHECK ( (debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) )
++    CONSTRAINT debit_or_credit_check CHECK ( (debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) )
+ );
+    ```
+*   **Review:** The `gst_rate` default has been correctly changed from `8.00` to `9.00`, aligning it with the ORM model. The `CHECK` constraint for `journal_entry_lines` was already correct in the SQL file, so no change was needed there, but I've validated it remains correct.
+*   **Conclusion:** The change is correct. The `schema.sql` file now serves as an accurate, human-readable reference for the application's intended database state.
+
+---
+
+### **Phase 2 Completion Summary**
+
+**Phase 2 is complete.**
+
+1.  **Data Integrity Enhanced:** The `JournalEntryLine` ORM model has been updated with a stricter `CHECK` constraint to prevent invalid `(0, 0)` accounting entries. *Note: This change will require a new Alembic migration to be generated and applied in a future step to bring the database in line with the model.*
+2.  **Schema Consistency Achieved:** The `scripts/database/schema.sql` file has been updated to reflect the correct default GST rate of 9%, resolving the inconsistency between it and the ORM model.
+
+The project's data definitions are now more robust and consistent. We have successfully addressed the issues planned for this phase.
+
+**Please review the changes. I am ready to proceed to Phase 3 upon your approval.**

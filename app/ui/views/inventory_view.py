@@ -1,7 +1,7 @@
 # File: app/ui/views/inventory_view.py
 """Main View for Inventory Management."""
 from __future__ import annotations
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict
 import uuid
 
 from PySide6.QtWidgets import (
@@ -17,6 +17,7 @@ from app.core.result import Success, Failure
 from app.business_logic.dto.inventory_dto import InventorySummaryDTO, PurchaseOrderDTO, StockMovementDTO
 from app.ui.dialogs.stock_adjustment_dialog import StockAdjustmentDialog
 from app.ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
+from app.ui.dialogs.receive_po_dialog import ReceivePODialog # Import the new dialog
 from app.core.async_bridge import AsyncWorker
 
 class InventoryTableModel(QAbstractTableModel):
@@ -106,9 +107,12 @@ class InventoryView(QWidget):
 
     def _setup_ui(self):
         self.tab_widget = QTabWidget()
-        self.tab_widget.addTab(self._create_inventory_summary_tab(), "Current Stock")
-        self.tab_widget.addTab(self._create_purchase_orders_tab(), "Purchase Orders")
-        self.tab_widget.addTab(self._create_stock_movements_tab(), "Stock Movements")
+        self.inventory_summary_tab = self._create_inventory_summary_tab()
+        self.purchase_orders_tab = self._create_purchase_orders_tab()
+        self.stock_movements_tab = self._create_stock_movements_tab()
+        self.tab_widget.addTab(self.inventory_summary_tab, "Current Stock")
+        self.tab_widget.addTab(self.purchase_orders_tab, "Purchase Orders")
+        self.tab_widget.addTab(self.stock_movements_tab, "Stock Movements")
         main_layout = QVBoxLayout(self)
         main_layout.addWidget(self.tab_widget)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -160,7 +164,7 @@ class InventoryView(QWidget):
         def _on_done(r, e):
             if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load inventory: {e or r.error}")
             elif isinstance(r, Success): self.inventory_model.refresh_data(r.value)
-        self.async_worker.run_task(self.core.inventory_manager.get_inventory_summary(self.company_id, self.outlet_id, search_term=search_term), _on_done)
+        self.async_worker.run_task(self.core.inventory_manager.get_inventory_summary(self.company_id, self.outlet_id, search_term=search_term), on_done_callback=_on_done)
 
     @Slot(str)
     def _on_inventory_search(self, text): self._load_inventory_summary(search_term=text)
@@ -182,7 +186,7 @@ class InventoryView(QWidget):
         def _on_done(r, e):
             if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load purchase orders: {e or r.error}")
             elif isinstance(r, Success): self.po_model.refresh_data(r.value)
-        self.async_worker.run_task(self.core.inventory_manager.get_all_purchase_orders(self.company_id, self.outlet_id), _on_done)
+        self.async_worker.run_task(self.core.inventory_manager.get_all_purchase_orders(self.company_id, self.outlet_id), on_done_callback=_on_done)
 
     @Slot()
     def _on_new_po(self):
@@ -192,9 +196,43 @@ class InventoryView(QWidget):
 
     @Slot()
     def _on_receive_po_items(self):
+        selected_index = self.po_table.currentIndex()
+        if not selected_index.isValid():
+            QMessageBox.information(self, "No Selection", "Please select a Purchase Order to receive items.")
+            return
+        
+        selected_po = self.po_model.get_po_at_row(selected_index.row())
+        if not selected_po:
+            return
+
+        if selected_po.status not in ['SENT', 'PARTIALLY_RECEIVED']:
+            QMessageBox.warning(self, "Invalid Status", f"Cannot receive items for a PO with status '{selected_po.status}'.")
+            return
+
+        dialog = ReceivePODialog(selected_po, self)
+        dialog.items_to_receive.connect(self._process_po_receipt)
+        dialog.exec()
+
+    @Slot(list)
+    def _process_po_receipt(self, items_to_receive: List[Dict[str, Any]]):
+        """Receives the items from the dialog and calls the manager."""
         selected_po = self.po_model.get_po_at_row(self.po_table.currentIndex().row())
-        if not selected_po: QMessageBox.information(self, "No Selection", "Please select a Purchase Order to receive items."); return
-        QMessageBox.information(self, "Not Implemented", f"Functionality to receive items for PO {selected_po.po_number} is not yet implemented.")
+        if not selected_po: return
+
+        self.receive_po_button.setEnabled(False)
+        
+        def _on_done(result: Any, error: Optional[Exception]):
+            self.receive_po_button.setEnabled(True)
+            if error or isinstance(result, Failure):
+                QMessageBox.critical(self, "Receiving Failed", f"Could not process receipt: {error or result.error}")
+            elif isinstance(result, Success):
+                QMessageBox.information(self, "Success", "Items received successfully.")
+                self._load_purchase_orders() # Refresh the list
+
+        coro = self.core.inventory_manager.receive_purchase_order_items(
+            selected_po.id, items_to_receive, self.user_id
+        )
+        self.async_worker.run_task(coro, on_done_callback=_on_done)
 
     def _load_stock_movements(self, product_id: Optional[uuid.UUID] = None, product_sku: str = "product"):
         if not product_id: self.movements_model.refresh_data([]); return
@@ -202,4 +240,4 @@ class InventoryView(QWidget):
         def _on_done(r, e):
             if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load stock movements: {e or r.error}")
             elif isinstance(r, Success): self.movements_model.refresh_data(r.value)
-        self.async_worker.run_task(self.core.inventory_manager.get_stock_movements_for_product(self.company_id, product_id), _on_done)
+        self.async_worker.run_task(self.core.inventory_manager.get_stock_movements_for_product(self.company_id, product_id), on_done_callback=_on_done)

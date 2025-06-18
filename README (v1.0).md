@@ -11,7 +11,7 @@
 <p align="center">
   <!-- Badges -->
   <a href="#">
-    <img src="https://img.shields.io/badge/Status-Stable-brightgreen" alt="Project Status">
+    <img src="https://img.shields.io/badge/Status-Active%20Development-green" alt="Project Status">
   </a>
   <a href="https://github.com/your-org/sg-pos-system/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
@@ -48,8 +48,8 @@
     *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
 *   [7. User Guide: Running the Application](#7-user-guide-running-the-application)
 *   [8. Project Roadmap](#8-project-roadmap)
-    *   [Next Steps (v1.1)](#next-steps-v11)
-    *   [Long-Term Vision (v2.0+)](#long-term-vision-v20)
+    *   [Immediate Goals](#immediate-goals)
+    *   [Long-Term Goals](#long-term-goals)
 *   [9. How to Contribute](#9-how-to-contribute)
 *   [10. License](#10-license)
 
@@ -65,25 +65,26 @@ This project is built with an obsessive focus on quality, both in the user exper
 
 ## **2. Current Features & Status**
 
-The application is currently in a **stable** state, with a robust architecture and a wide range of functional core features. All major bugs identified during the initial development phase have been resolved.
+The application is in a state of active development. The core architecture is stable and robust, and many key workflows are fully implemented and functional.
 
 | Feature Area                      | Status                  | Notes                                                                                                                              |
 | --------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Sales & Checkout**              | ✅ **Functional**       | Core sales processing, cart management, split-tender payment collection, and receipt data generation are fully working.                |
 | **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers are implemented via the `CustomerView` and `CustomerDialog`.     |
-| **Product Management**            | ✅ **Functional**       | Full CRUD operations for products are implemented via the `ProductView` and `ProductDialog`, with responsive, debounced searching.       |
 | **User & Role Management**        | ✅ **Functional**       | `SettingsView` provides full CRUD operations for users, including multi-role assignment via a dedicated `UserDialog`.                    |
 | **Inventory Management**          | ✅ **Functional**       | `InventoryView` provides a live stock summary, stock movement history, and filtering capabilities. Stock adjustments are fully functional. |
-| **Purchase Orders & Stock-ins**   | ✅ **Functional**       | Creation of Purchase Orders and receiving of items (full or partial) against a PO are fully implemented and update stock levels correctly. |
+| **Purchase Orders**               | ✅ **Functional**       | Creation of new Purchase Orders via the `PurchaseOrderDialog` is fully implemented, including supplier and product lookups.            |
 | **Reporting & Analytics**         | ✅ **Functional**       | The backend `ReportingManager` and `GstManager` correctly generate data for all implemented reports (Sales, GST, Inventory Valuation). |
-| **Report Exporting**              | ✅ **Functional**       | All generated reports can be exported to professional-looking PDF files and relevant data tables can be exported to CSV.             |
-| **Company Information**           | ✅ **Functional**       | The `SettingsView` now allows for viewing and saving all company-level information, such as name, address, and registration numbers. |
+| **Product Management**            | 🟡 **Partially Implemented** | Full backend logic and a `ProductDialog` for creating/editing products are functional. The main `ProductView` table is not yet implemented. |
+| **Company Information**           | 🟡 **Partially Implemented** | The UI for viewing/editing company info exists in `SettingsView`, but the save logic is not yet implemented.                     |
+| **Stock Receiving**               | 🔴 **Placeholder**      | The UI button for receiving items against a Purchase Order exists but is not yet functional.                                       |
+| **Report Exporting**              | 🔴 **Placeholder**      | UI buttons for exporting reports to PDF/CSV exist but are not yet functional.                                                    |
 
 ---
 
 ## **3. Architectural Deep Dive**
 
-SG-POS is built on a set of robust architectural principles designed for maintainability and scalability.
+SG-POS is built on a set of robust architectural principles designed for maintainability, testability, and scalability.
 
 ### The Layered Architecture
 
@@ -92,7 +93,7 @@ Our architecture strictly separates the application into four logical layers, en
 1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic.
 2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. **Managers** orchestrate workflows and enforce business rules, using **DTOs** (Data Transfer Objects) as data contracts.
 3.  **Data Access Layer (`app/services`):** Implements the Repository Pattern. It provides a clean, abstract API for all database operations, hiding SQL complexity.
-4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to the PostgreSQL tables.
+4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to PostgreSQL tables.
 
 ### Module Interaction Flowchart
 
@@ -167,7 +168,6 @@ sg-pos-system/
 ├── scripts/
 │   └── database/
 │       ├── schema.sql          # The complete, hand-written SQL schema (source of truth)
-│       └── seed_data.py        # Script for populating the database with initial data
 │
 └── tests/                    # Contains all unit, integration, and UI tests
 ```
@@ -186,8 +186,8 @@ sg-pos-system/
 | `app/business_logic/managers/`   | **Business Logic Layer.** Orchestrates workflows, enforces business rules, and makes decisions.        |
 | `app/business_logic/dto/`        | **Data Contracts.** Pydantic models that define the structure of data passed between layers.           |
 | `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, inventory, and settings panels. |
-| `app/ui/dialogs/`                | **Interactive Dialogs.** Contains dialog windows for specific operations like making a payment or receiving PO items. |
-| `scripts/database/seed_data.py`  | **Initial Data.** A crucial script to populate a fresh database with the necessary default company, user, and outlet. |
+| `app/ui/dialogs/`                | **Interactive Dialogs.** Contains dialog windows for specific operations like making a payment or adding a user. |
+| `scripts/database/schema.sql`    | **Schema Source of Truth.** A complete, readable SQL script defining the entire database structure.      |
 
 ---
 
@@ -206,13 +206,12 @@ This project uses a modern, professional-grade technology stack chosen for perfo
 | **Testing**       | `pytest`, `pytest-qt`, `pytest-asyncio`            | A powerful and flexible testing ecosystem that covers all aspects of our application (core, UI, async).      |
 | **Packaging**     | Poetry                                             | Modern, reliable dependency management and packaging that guarantees reproducible environments.             |
 | **Code Quality**  | Black (Formatter), Ruff (Linter), MyPy (Type Checker)| A trifecta of tools to enforce code style, catch bugs early, and ensure long-term maintainability.          |
-| **PDF/CSV Export**| `reportlab`, `openpyxl`                            | Proven libraries for generating professional documents and spreadsheet-compatible files.                      |
 
 ---
 
 ## **6. Developer Setup & Deployment Guide**
 
-This guide provides step-by-step instructions to set up a complete local development environment for the SG-POS application from scratch.
+This guide provides step-by-step instructions to set up a complete local development environment for the SG-POS application.
 
 ### Prerequisites
 
@@ -223,110 +222,137 @@ This guide provides step-by-step instructions to set up a complete local develop
 
 ### Step-by-Step Setup Guide
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/your-org/sg-pos-system.git
-    cd sg-pos-system
-    ```
+#### **Step 1: Clone the Repository**
+Open your terminal or command prompt and clone the project from GitHub.
 
-2.  **Configure Environment Variables**
-    Copy the example environment file. The default values are suitable for the local Docker setup.
-    ```bash
-    cp .env.example .env.dev
-    ```
+```bash
+git clone https://github.com/your-org/sg-pos-system.git
+cd sg-pos-system
+```
 
-3.  **Start the Database Server**
-    This command downloads and starts the PostgreSQL container in the background.
-    ```bash
-    docker compose -f docker-compose.dev.yml up -d
-    ```
+#### **Step 2: Configure Environment Variables**
+The application uses a `.env.dev` file for local configuration. You can create one by copying the provided template. The default values are suitable for local development and match the Docker configuration.
 
-4.  **Install Project Dependencies**
-    This command creates a virtual environment and installs all required packages.
-    ```bash
-    poetry install
-    ```
+```bash
+cp .env.example .env.dev
+```
 
-5.  **Activate the Virtual Environment**
-    All subsequent commands must be run inside this environment.
-    ```bash
-    poetry shell
-    ```
+#### **Step 3: Start the Database Server**
+This command will download the PostgreSQL image (if not already present), create a container named `sgpos_dev_db`, and run it in the background. The database will be accessible on `localhost:5432`.
 
-6.  **Apply Database Migrations**
-    This command connects to the database and creates all the necessary tables.
-    ```bash
-    alembic upgrade head
-    ```
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
+*   **To check if the database is running:** `docker ps` (You should see `sgpos_dev_db`).
+*   **To view logs:** `docker logs sgpos_dev_db`.
+*   **To stop the database:** `docker compose -f docker-compose.dev.yml down`.
 
-7.  **Seed Initial Data (Crucial First-Time Step)**
-    This script populates the database with the default company, user, and outlet needed to run the application.
-    ```bash
-    python scripts/database/seed_data.py
-    ```
+#### **Step 4: Install Project Dependencies**
+Poetry will read the `pyproject.toml` file, create a dedicated virtual environment for the project, and install all necessary production and development packages.
 
-8.  **Run the Application**
-    You are now ready to launch the POS system.
-    ```bash
-    python app/main.py
-    ```
+```bash
+poetry install
+```
+
+#### **Step 5: Activate the Virtual Environment**
+To run the application or any project-specific commands, you must first activate the virtual environment created by Poetry.
+
+```bash
+poetry shell
+```
+Your terminal prompt should now indicate that you are inside the project's virtual environment.
+
+#### **Step 6: Run Database Migrations**
+This crucial step connects to the running Docker database and creates all the necessary tables and relationships defined in the `app/models` directory.
+
+```bash
+alembic upgrade head
+```
+You should see output from Alembic indicating that it is applying the migrations.
+
+#### **Step 7: Run the Application**
+With the database running and dependencies installed, you are now ready to launch the SG-POS system.
+
+```bash
+python app/main.py
+```
+The main application window should appear on your screen.
 
 ---
 
 ## **7. User Guide: Running the Application**
 
-Once the application is running, here is a brief guide on how to use its core features:
+Once the application is running, here is a brief guide on how to perform common tasks.
 
-*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, etc.) to switch between the different sections.
+*   **Main Window & Navigation:** The application opens to the main `POSView`, ready for a sale. Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, `Inventory`, etc.) to switch between the different sections of the application.
 
 *   **Making a Sale:**
-    1.  In the default **POS** screen, find an item by its SKU or name using the "Product" search bar.
-    2.  Click **"Add to Cart"**. The item appears on the left.
-    3.  When ready, click the green **"PAY"** button.
-    4.  In the **Payment Dialog**, add one or more payment methods until the balance is zero.
-    5.  Click **"Finalize Sale"** to complete the transaction.
+    1.  In the `POSView`, use the **Product** search bar on the right to find an item by its SKU or name.
+    2.  Click **"Add to Cart"**. The item will appear in the "Current Sale Items" list on the left. You can double-click the quantity in the table to change it.
+    3.  When all items are added, click the large green **"PAY"** button.
+    4.  In the `PaymentDialog`, select a payment method, enter an amount, and click **"Add Payment"**. Repeat for split-tender payments.
+    5.  Once the "Balance" is zero or less, click **"Finalize Sale"** to complete the transaction.
 
-*   **Managing Data (Products, Customers):**
-    1.  Navigate to `Data Management > Products` or `Data Management > Customers`.
-    2.  The view will display a list of all items. Use the search bar for live filtering.
-    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records.
+*   **Managing Customers:**
+    1.  Navigate to `Data Management > Customers`.
+    2.  Click **"Add New Customer"** to open a dialog for creating a new customer.
+    3.  Select a customer from the table and click **"Edit Selected"** to update their details.
+    4.  Use the search bar at the top to filter the customer list.
 
-*   **Managing Inventory:**
+*   **Managing Users:**
+    1.  Navigate to `Settings > Application Settings` and go to the "User Management" tab.
+    2.  Click **"Add New User"** to open a dialog where you can set their username, password, and assign one or more roles.
+    3.  Select a user and click **"Edit Selected User"** to modify their details.
+
+*   **Performing a Stock Adjustment:**
     1.  Navigate to `Inventory > Stock Management`.
-    2.  Click the **"Purchase Orders"** tab to view existing POs or create a new one.
-    3.  Select a PO with status "Sent" or "Partially Received" and click **"Receive Items on PO"** to record incoming stock.
-    4.  Click the **"Current Stock"** tab and use the **"Adjust Stock"** button to perform manual stock takes or adjustments.
-
-*   **Reporting:**
-    1.  Navigate to `Reports > Business Reports`.
-    2.  Select a report type and date range, then click **"Generate Report"**.
-    3.  Once the report is displayed, use the **"Export PDF"** or **"Export CSV"** buttons to save it to your computer.
+    2.  Click the **"Adjust Stock"** button.
+    3.  In the dialog, search for products to add them to the adjustment list.
+    4.  Enter the physically counted quantity in the "Counted Quantity" column for each item. The variance will be calculated automatically.
+    5.  Add a reason for the adjustment in the notes box and click **"Submit Adjustment"**.
 
 ---
 
 ## **8. Project Roadmap**
 
-With the core features now stable and functional, the project can focus on enhancements and new modules.
+### Immediate Goals
 
-### Next Steps (v1.1)
+These tasks focus on fixing bugs, completing existing features, and improving developer experience.
 
-*   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing).
-*   **Dashboard View:** Create a main dashboard view that displays key performance indicators (KPIs) like daily sales, top products, and low stock alerts.
-*   **UI/UX Refinements:** Add user-friendly "empty state" messages to tables and improve visual feedback during operations.
-*   **Enhanced Test Coverage:** Increase unit and integration test coverage for all business logic and data service methods.
+*   [ ] **Complete Product View:** Implement a functional `QAbstractTableModel` and data loading logic for `app/ui/views/product_view.py` to display the product catalog.
+*   [ ] **Implement Stock Receiving:** Build the UI and backend logic to receive items against an existing Purchase Order, automatically updating stock levels.
+*   [ ] **Implement Report Exporting:** Add functionality to the "Export PDF" and "Export CSV" buttons in the `ReportsView` using libraries like `reportlab` and `openpyxl`.
+*   [ ] **Implement Company Info Saving:** Connect the "Save Company Information" button in `SettingsView` to a `CompanyManager` method to persist changes.
+*   [ ] **Enhance Test Coverage:** Increase unit and integration test coverage, especially for the business logic managers.
+*   [ ] **Create Contribution Docs:** Finalize and polish the `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` files.
 
-### Long-Term Vision (v2.0+)
+### Long-Term Goals
 
-*   **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking.
-*   **Accounting Integration:** Add functionality to export sales and purchase data to formats compatible with common accounting software like Xero and QuickBooks.
-*   **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels.
-*   **Cloud Backend:** Architect a cloud-based version of the backend to support a mobile companion app, web-based reporting dashboard, and centralized data management for multi-outlet businesses.
+These are larger features that build on the stable foundation.
+
+*   [ ] **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing).
+*   [ ] **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking.
+*   [ ] **Accounting Integration:** Add functionality to export sales and purchase data to formats compatible with common accounting software like Xero and QuickBooks.
+*   [ ] **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels.
+*   [ ] **Cloud Backend (v2.0):** Architect a cloud-based version of the backend to support a mobile companion app, web-based reporting dashboard, and centralized data management for multi-outlet businesses.
 
 ---
 
 ## **9. How to Contribute**
 
-We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued. Please see the `CONTRIBUTING.md` file for detailed guidelines on our development process and how to submit a pull request.
+We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued.
+
+**Our contribution workflow is simple:**
+
+1.  **Find an issue:** Look for issues tagged with `good first issue` or `help wanted` on our GitHub Issues page.
+2.  **Fork the repository:** Create your own copy of the project.
+3.  **Create a feature branch:** `git checkout -b feature/your-awesome-feature`.
+4.  **Make your changes:** Write your code and make sure to add corresponding tests.
+5.  **Run all checks:** Before pushing, ensure your code passes all quality checks: `pytest`, `black .`, `ruff . --fix`, `mypy app`.
+6.  **Submit a Pull Request (PR):** Push your branch to your fork and open a PR against our `main` branch.
+7.  **Code Review:** Your PR will be reviewed by the maintainers.
+
+*(A detailed CONTRIBUTING.md file is in the repo).*
 
 ---
 

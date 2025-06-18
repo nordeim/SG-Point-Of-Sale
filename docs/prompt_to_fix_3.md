@@ -10,8 +10,16 @@ The important point is to proceed very carefully so as not to introduce any regr
 ---
 Below is "diff" command output comparing the previous version with your latest generated version. Please double-check and validate that the changes are valid and that no other original features or functions are lost (omitted). use the same rigorous and meticulous approach to review the diff output below.
 
-```diff
-```
+---
+Awesome job so far! Arrange the following issues, gaps and improvements into logical phases of tasks, arrange the phases into logical order, then for each phase, think deeply and systematically to explore carefully and thoroughly to plan in detail for the task actions to be completed and files to be created, create a corresponding checklist for each sub-task to be execute and for each file to be created or updated. Come up with a comprehensive plan arranged in logical phases to cover all actions and sub-actions to be carried out, each sub-task with its checklist, before proceeding with the execution one phase at a time. Wait for me to confirm the successful completion of each phase before proceeding to the next phase in the overall comprehensive and detailed execution plan.
+
+*IMPORTANT* to carefully and thoroughly through systematic line by line validation of the below mentioned issues against the current codebase (including your latest updated code files) first before finalizing the list of issues to resolve, only then start your execution planning.
+
+---
+that is an awesome planning. please proceed to execute Phase 1 of your plan meticulously and systematically.
+
+---
+awesome job! please help me systematically and thoroughly review and validate the application start up log below. If everything is good, then proceed to execute Phase 1 of your plan meticulously and systematically.
 
 ---
 Awesome job! Now help me to carefully review and validate the application codebase shared in the `project_codebase_files_set.md` attached earlier. Use line by line review to get a good grounding of the purpose of the application and its codebase, then create for me a detailed architecture overview document in markdown and named `Project Architecture Overview Document.md`. Make sure you do a careful review and validation of the application codebase shared. Use line by line review to get a good grounding of the purpose of the application and its codebase. Use at least 6000 words for the document that accurately describes the codebase in detail, use a clear diagram to show the codebase relationship. Include a section to describe the file structure and the purpose of each folder and key files, start with a diagram.

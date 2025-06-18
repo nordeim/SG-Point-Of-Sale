@@ -2,6 +2,7 @@
 """SQLAlchemy models for User, Role, and Permission entities."""
 import uuid
 from datetime import datetime
+from typing import List # Import List for type hinting
 import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -29,6 +30,11 @@ class User(Base, TimestampMixin):
     stock_movements_created = relationship("StockMovement", back_populates="user", doc="Stock movements created by this user")
     journal_entries_created = relationship("JournalEntry", back_populates="created_by_user", doc="Journal entries created by this user")
     audit_logs = relationship("AuditLog", back_populates="user", doc="Audit logs associated with this user")
+
+    @property
+    def roles(self) -> "List[Role]":
+        """Provides a direct list of Role objects for this user."""
+        return [user_role.role for user_role in self.user_roles]
 
     __table_args__ = (
         sa.UniqueConstraint('company_id', 'username', name='uq_user_company_username'),

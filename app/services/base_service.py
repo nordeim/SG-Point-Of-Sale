@@ -71,7 +71,7 @@ class BaseService:
         limit: int = 100,
         offset: int = 0,
         options: Optional[List] = None,
-        **kwargs: Any
+        **filter_conditions: Any
     ) -> Result[List[ModelType], str]:
         """
         Fetches all records for the model with pagination and dynamic filtering.
@@ -81,7 +81,8 @@ class BaseService:
             limit: Maximum number of records to return.
             offset: Number of records to skip.
             options: A list of SQLAlchemy loader options (e.g., for eager loading).
-            **kwargs: Additional filter conditions where key is a column name.
+            **filter_conditions: Additional filter conditions where key is a column 
+                               name and value is the value to filter by (e.g., is_active=True).
         
         Returns:
             A Success containing a list of model instances, or a Failure.
@@ -90,9 +91,9 @@ class BaseService:
             async with self.core.get_session() as session:
                 stmt = select(self.model).where(self.model.company_id == company_id).offset(offset).limit(limit)
                 
-                # FIX: Dynamically apply filters from kwargs
-                for key, value in kwargs.items():
-                    if hasattr(self.model, key) and value is not None:
+                # Dynamically apply filters from kwargs
+                for key, value in filter_conditions.items():
+                    if hasattr(self.model, key):
                         stmt = stmt.where(getattr(self.model, key) == value)
 
                 if options:

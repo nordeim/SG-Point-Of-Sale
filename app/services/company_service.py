@@ -18,6 +18,27 @@ class CompanyService(BaseService):
     def __init__(self, core: "ApplicationCore"):
         super().__init__(core, Company)
 
+    async def get_by_registration_number(self, registration_number: str) -> Result[Company | None, str]:
+        """Fetches a company by its unique registration number."""
+        try:
+            async with self.core.get_session() as session:
+                stmt = select(self.model).where(self.model.registration_number == registration_number)
+                result = await session.execute(stmt)
+                return Success(result.scalar_one_or_none())
+        except Exception as e:
+            return Failure(f"Database error fetching company by registration number: {e}")
+
+    async def get_by_gst_number(self, gst_number: str) -> Result[Company | None, str]:
+        """Fetches a company by its unique GST registration number."""
+        try:
+            async with self.core.get_session() as session:
+                stmt = select(self.model).where(self.model.gst_registration_number == gst_number)
+                result = await session.execute(stmt)
+                return Success(result.scalar_one_or_none())
+        except Exception as e:
+            return Failure(f"Database error fetching company by GST number: {e}")
+
+
 class OutletService(BaseService):
     """Handles database interactions for Outlet models."""
     def __init__(self, core: "ApplicationCore"):
