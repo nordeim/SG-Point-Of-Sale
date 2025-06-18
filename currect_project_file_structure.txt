@@ -1,13 +1,12 @@
-# find pyproject.toml .env.example docker-compose.dev.yml alembic.ini README.md app scripts migrations resources tests docs -type f
+# find pyproject.toml .env.example .gitignore docker-compose.dev.yml alembic.ini app scripts migrations resources tests docs README.md CODE_OF_CONDUCT.md  CONTRIBUTING.md -type f
 pyproject.toml
 .env.example
+.gitignore
 docker-compose.dev.yml
 alembic.ini
-README.md
 app/main.py
 app/integrations/__init__.py
 app/__init__.py
-app/ui/main_window.py-diag
 app/ui/__init__.py
 app/ui/dialogs/stock_adjustment_dialog.py
 app/ui/dialogs/__init__.py
@@ -143,3 +142,6 @@ tests/__init__.py
 tests/conftest.py
 tests/unit/__init__.py
 docs/Project_Architecture_Document.md
+README.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md

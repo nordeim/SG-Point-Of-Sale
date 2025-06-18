@@ -201,6 +201,74 @@ CURRENT_USER_ID=00000000-0000-0000-0000-000000000003
 
 ```
 
+# .gitignore
+```txt
+# Byte-code files
+*.pyc
+__pycache__/
+
+# Virtual environment directories (commonly used by Poetry or custom setups)
+bin/
+include/
+lib/
+lib64
+.venv/
+env/
+venv/
+
+# Environment variables
+.env
+.env.dev
+.env.production
+*.env # General ignore for .env files
+
+# Poetry specific
+.venv/
+poetry.lock
+
+# Database specific
+*.db
+*.sqlite
+data/
+
+# PySide6/Qt specific
+*.ui
+*.qrc
+*.moc
+*.qmlc
+*.pyi
+debug/
+release/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# MyPy cache
+.mypy_cache/
+
+# Editors & IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+```
+
 # docker-compose.dev.yml
 ```yml
 version: '3.8'
@@ -273,344 +341,6 @@ args = (sys.stderr,)
 format = %(levelname)-5.5s [%(name)s] %(message)s
 datefmt = %H:%M:%S
 
-
-```
-
-# README.md
-```md
-<p align="center">
-  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Logo" width="600"/>
-</p>
-
-<h1 align="center">SG Point-of-Sale (SG-POS) System</h1>
-
-<p align="center">
-  <strong>An enterprise-grade, open-source Point-of-Sale system, meticulously engineered for Singapore's SMB retail landscape.</strong>
-</p>
-
-<p align="center">
-  <!-- Badges -->
-  <a href="#">
-    <img src="https://img.shields.io/badge/Status-In%20Development-orange" alt="Project Status">
-  </a>
-  <a href="https://github.com/your-org/sg-pos-system/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
-  </a>
-  <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/Python-3.11+-3776AB.svg" alt="Python 3.11+">
-  </a>
-  <a href="https://www.qt.io/">
-    <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41CD52.svg" alt="PySide6">
-  </a>
-  <a href="https://www.postgresql.org/">
-    <img src="https://img.shields.io/badge/Database-PostgreSQL-336791.svg" alt="PostgreSQL">
-  </a>
-  <a href="https://github.com/psf/black">
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black">
-  </a>
-</p>
-
----
-
-## 📖 Table of Contents
-
-*   [1. Introduction: What is SG-POS?](#1-introduction-what-is-sg-pos)
-*   [2. Current Features & Status](#2-current-features--status)
-*   [3. Architectural Deep Dive](#3-architectural-deep-dive)
-    *   [The Layered Architecture](#the-layered-architecture)
-    *   [Module Interaction Flowchart](#module-interaction-flowchart)
-*   [4. Codebase Deep Dive](#4-codebase-deep-dive)
-    *   [Project File Hierarchy](#project-file-hierarchy)
-    *   [Key File & Directory Descriptions](#key-file--directory-descriptions)
-*   [5. Technology Stack](#5-technology-stack)
-*   [6. Developer Setup & Deployment Guide](#6-developer-setup--deployment-guide)
-    *   [Prerequisites](#prerequisites)
-    *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
-*   [7. User Guide: Running the Application](#7-user-guide-running-the-application)
-*   [8. Project Roadmap](#8-project-roadmap)
-    *   [Immediate Goals (v1.0.1)](#immediate-goals-v101)
-    *   [Long-Term Goals (v1.1+)](#long-term-goals-v11)
-*   [9. How to Contribute](#9-how-to-contribute)
-*   [10. License](#10-license)
-
----
-
-## **1. Introduction: What is SG-POS?**
-
-**SG-POS** is a free and open-source Point-of-Sale system, engineered from the ground up to address the specific operational and regulatory challenges faced by Small to Medium-sized Businesses (SMBs) in Singapore. It aims to provide the power and polish of expensive enterprise systems in an accessible, modern, and maintainable package.
-
-This project is built with an obsessive focus on quality, both in the user experience and, most importantly, in the engineering. It serves not only as a functional tool but also as a reference implementation for professional-grade Python application architecture.
-
----
-
-## **2. Current Features & Status**
-
-The application is currently in a feature-complete skeleton state, with the core architecture and many key workflows fully implemented.
-
-| Feature Area                      | Status                  | Notes                                                                                                         |
-| --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Sales & Checkout**              | ✅ **Functional**       | Core sales processing, cart management, and payment collection via the `POSView` and `PaymentDialog` are working. |
-| **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers are implemented in `CustomerView`.      |
-| **Inventory Management**          | ✅ **Functional**       | `InventoryView` provides a stock summary, PO management, and stock movement history.                          |
-| **Purchase Orders & Stock-ins**   | ✅ **Functional**       | Creation of Purchase Orders and stock adjustments are fully implemented via dialogs.                          |
-| **Reporting & Analytics**         | ✅ **Functional**       | The backend `ReportingManager` and `GstManager` correctly generate data for all implemented reports.          |
-| **User & Company Settings**       | 🟡 **Partially Implemented** | `SettingsView` can display company and user info. Role assignment logic is a backend `TODO`.                |
-| **Product Management**            | 🔴 **Placeholder**      | The `ProductView` UI is a placeholder. The backend logic is complete, but the UI is not yet functional.     |
-
----
-
-## **3. Architectural Deep Dive**
-
-SG-POS is built on a set of robust architectural principles designed for maintainability and scalability.
-
-### The Layered Architecture
-
-Our architecture strictly separates the application into four logical layers:
-
-1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic.
-2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. `Managers` orchestrate workflows and enforce business rules, using `DTOs` (Data Transfer Objects) as data contracts.
-3.  **Data Access Layer (`app/services`):** Implements the Repository Pattern. It provides a clean, abstract API (e.g., `product_service.get_by_sku()`) for database operations, hiding SQL complexity.
-4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to PostgreSQL tables.
-
-### Module Interaction Flowchart
-
-The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them.
-
-```mermaid
-graph TD
-    subgraph "User Interface (app/ui)"
-        direction TB
-        A[Views & Dialogs] -- "1. User Action" --> B{Async Bridge};
-    end
-
-    subgraph "Business Logic (app/business_logic)"
-        direction TB
-        C[Managers] --> D[Data Transfer Objects (DTOs)];
-    end
-
-    subgraph "Data Access (app/services)"
-        direction TB
-        E[Services (Repositories)];
-    end
-
-    subgraph "Data Model (app/models)"
-        direction TB
-        F[ORM Models (SQLAlchemy)];
-    end
-    
-    subgraph "Database"
-        direction TB
-        G[PostgreSQL];
-    end
-
-    subgraph "Application Core (app/core)"
-        direction TB
-        H[ApplicationCore (DI Container)] -- Manages --> I[Async Worker];
-    end
-
-    %% Interactions
-    B -- "2. Submits Task to Worker Thread" --> I;
-    I -- "3. Executes Task" --> C;
-    H -- Provides Dependencies --> C;
-    C -- "4. Orchestrates Logic" --> E;
-    E -- "5. Queries Database" --> F;
-    F -- "6. Maps to" --> G;
-    E -- "7. Returns ORM Models" --> C;
-    C -- "8. Converts to DTOs" --> D;
-    C -- "9. Returns Result(DTO)" --> I;
-    I -- "10. Signals Result" --> B;
-    B -- "11. Delivers to UI Callback" --> A;
-
-```
----
-
-## **4. Codebase Deep Dive**
-
-### Project File Hierarchy
-
-```
-sg-pos-system/
-├── app/
-│   ├── core/
-│   ├── models/
-│   ├── services/
-│   ├── business_logic/
-│   │   ├── dto/
-│   │   └── managers/
-│   ├── ui/
-│   │   ├── dialogs/
-│   │   ├── resources/
-│   │   ├── views/
-│   │   └── widgets/
-│   ├── integrations/
-│   └── main.py
-├── migrations/
-│   ├── versions/
-│   └── env.py
-├── scripts/
-│   └── database/
-├── tests/
-├── .env.example
-├── alembic.ini
-├── docker-compose.dev.yml
-└── pyproject.toml
-```
-
-### Key File & Directory Descriptions
-
-| Path                             | Description                                                                                              |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `pyproject.toml`                 | **Project Definition.** Manages all dependencies, project metadata, and development tool configurations.     |
-| `docker-compose.dev.yml`         | **Database Service.** Defines and configures the PostgreSQL database container for local development.        |
-| `alembic.ini` / `migrations/`    | **Database Migrations.** Configuration and scripts for managing database schema evolution using Alembic. |
-| `app/main.py`                    | **Application Entry Point.** Initializes the application core, the UI, and starts the event loop.        |
-| `app/core/`                      | **The Backbone.** Contains the `ApplicationCore` (DI container), `async_bridge`, `config`, and `Result` pattern. |
-| `app/models/`                    | **Persistence Layer.** Defines all SQLAlchemy ORM models, mirroring the database tables.               |
-| `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic.         |
-| `app/business_logic/managers/`   | **Business Logic Layer.** Orchestrates workflows, enforces business rules, and makes decisions.        |
-| `app/business_logic/dto/`        | **Data Contracts.** Pydantic models that define the structure of data passed between layers.           |
-| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, inventory, and settings panels. |
-| `app/ui/dialogs/`                | **Interactive Dialogs.** Contains dialog windows for specific operations like making a payment or a PO. |
-
----
-
-## **5. Technology Stack**
-
-This project uses a modern, professional-grade technology stack.
-
-| Category          | Technology                                         | Rationale                                                                                                   |
-| ----------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Language**      | Python 3.11+                                       | Modern features, performance improvements, and strong ecosystem.                                            |
-| **GUI Framework** | PySide6 (Qt 6)                                     | The gold standard for professional, high-performance, cross-platform desktop applications in Python.        |
-| **Database**      | PostgreSQL 16+                                     | Unmatched reliability, scalability, and feature set for handling critical business and financial data.      |
-| **ORM**           | SQLAlchemy 2.0                                     | Industry-leading Object-Relational Mapper with powerful features and excellent async support.               |
-| **DB Migrations** | Alembic                                            | The standard for managing database schema changes with SQLAlchemy.                                          |
-| **Async**         | `asyncio`                                          | Python's native library for writing concurrent code, essential for a responsive application.                |
-| **Testing**       | `pytest`, `pytest-qt`, `pytest-asyncio`            | A powerful and flexible testing ecosystem that covers all aspects of our application (core, UI, async).      |
-| **Packaging**     | Poetry                                             | Modern, reliable dependency management and packaging that guarantees reproducible environments.             |
-| **Code Quality**  | Black (Formatter), Ruff (Linter), MyPy (Type Checker)| A trifecta of tools to enforce code style, catch bugs early, and ensure long-term maintainability.          |
-
----
-
-## **6. Developer Setup & Deployment Guide**
-
-This guide provides step-by-step instructions to set up a complete local development environment.
-
-### Prerequisites
-
-*   **Git:** For version control.
-*   **Python 3.11+:** Make sure it's installed and available in your `PATH`.
-*   **Poetry:** For managing dependencies. See the [official installation guide](https://python-poetry.org/docs/#installation).
-*   **Docker & Docker Compose:** To run the PostgreSQL database locally without needing to install it on your system.
-
-### Step-by-Step Setup Guide
-
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/your-org/sg-pos-system.git
-    cd sg-pos-system
-    ```
-
-2.  **Configure Environment Variables**
-    Copy the example environment file. No changes are needed for a standard local setup.
-    ```bash
-    cp .env.example .env.dev
-    ```
-
-3.  **Start the Database Server**
-    This command downloads the PostgreSQL image (if not present) and starts the database container in the background.
-    ```bash
-    docker compose -f docker-compose.dev.yml up -d
-    ```
-    You can check if the database is ready by running `docker logs sgpos_dev_db`.
-
-4.  **Install Project Dependencies**
-    Poetry will read the `pyproject.toml` file, create a virtual environment, and install all necessary production and development packages.
-    ```bash
-    poetry install
-    ```
-
-5.  **Activate the Virtual Environment**
-    All subsequent commands must be run inside this environment to use the installed packages.
-    ```bash
-    poetry shell
-    ```
-
-6.  **Run Database Migrations**
-    This command connects to the database and creates all the tables defined in `app/models`.
-    ```bash
-    alembic upgrade head
-    ```
-
-7.  **Run the Application**
-    You are now ready to launch the POS system.
-    ```bash
-    python app/main.py
-    ```
-
----
-
-## **7. User Guide: Running the Application**
-
-Once the application is running, here is a brief guide on how to use it:
-
-*   **Main Window:** The application opens to the main `POSView`, ready for a sale.
-*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, `Inventory`, etc.) to switch between different sections of the application.
-*   **Making a Sale:**
-    1.  In the `POSView`, use the "Product" search bar on the right to find an item by its SKU.
-    2.  Click "Add to Cart". The item will appear in the "Current Sale Items" list on the left.
-    3.  When all items are added, click the green "PAY" button.
-    4.  In the `PaymentDialog`, add one or more payment methods until the balance is zero.
-    5.  Click "Finalize Sale" to complete the transaction.
-*   **Managing Data:** Navigate to `Data Management > Customers` or `Inventory > Current Stock` to view, add, and edit data. Most views follow a similar pattern of a search bar, an action button (`Add`, `Edit`), and a table displaying the data.
-
----
-
-## **8. Project Roadmap**
-
-### Immediate Goals (v1.0.1)
-
-These tasks focus on fixing bugs, completing existing features, and improving developer experience.
-
-*   [ ] **Fix Product Dialog:** Implement the asynchronous save logic in `app/ui/dialogs/product_dialog.py`.
-*   [ ] **Complete User Roles:** Implement the role assignment logic in `app/business_logic/managers/user_manager.py`.
-*   [ ] **Implement Product View:** Build a functional `QAbstractTableModel` and data loading logic for `app/ui/views/product_view.py`.
-*   [ ] **Align Database Migrations:** Correct the initial Alembic migration file to match the latest ORM models, especially in `journal_entries`.
-*   [ ] **Create Contribution Docs:** Write the `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` files.
-
-### Long-Term Goals (v1.1+)
-
-These are larger features that build on the stable foundation.
-
-*   [ ] **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts).
-*   [ ] **Multi-Location Inventory:** Build features for transferring stock between different outlets.
-*   [ ] **Accounting Integration:** Add functionality to export sales and purchase data to formats compatible with Xero and QuickBooks.
-*   [ ] **E-commerce Connector:** Develop an integration with Shopify to sync products and inventory levels.
-*   [ ] **Cloud Backend (v2.0):** Architect a cloud-based version of the backend to support a mobile companion app and centralized data management for multi-outlet businesses.
-
----
-
-## **9. How to Contribute**
-
-We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued.
-
-**Our contribution workflow is simple:**
-
-1.  **Find an issue:** Look for issues tagged with `good first issue` or `help wanted` on our GitHub Issues page.
-2.  **Fork the repository:** Create your own copy of the project.
-3.  **Create a feature branch:** `git checkout -b feature/your-awesome-feature`.
-4.  **Make your changes:** Write your code and make sure to add corresponding tests.
-5.  **Run all checks:** Before pushing, ensure your code passes all quality checks: `pytest`, `black .`, `ruff .`, `mypy app`.
-6.  **Submit a Pull Request (PR):** Push your branch to your fork and open a PR against our `main` branch.
-7.  **Code Review:** Your PR will be reviewed by the maintainers.
-
-*(A detailed CONTRIBUTING.md file is in the repo).*
-
----
-
-## **10. License**
-
-This project is licensed under the **MIT License**. See the `LICENSE` file for full details. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.
 
 ```
 
@@ -691,126 +421,6 @@ if __name__ == "__main__":
 
 # app/__init__.py
 ```py
-
-```
-
-# app/ui/main_window.py-diag
-```py-diag
-# File: app/ui/main_window.py (DIAGNOSTIC VERSION)
-"""
-The main window of the SG-POS application.
-This QMainWindow acts as the shell, hosting different views.
-DIAGNOSTIC VERSION: This file will be used to isolate the source of the startup error.
-"""
-import sys
-from typing import Optional, Any
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QLabel,
-    QStackedWidget, QMenuBar, QMenu, QMessageBox, QApplication
-)
-from PySide6.QtCore import Slot, QEvent, QObject, QMetaObject, Qt, Q_ARG
-
-from app.core.application_core import ApplicationCore
-from app.core.async_bridge import AsyncWorker
-
-# Import all views that will be hosted
-print("[DIAGNOSTIC] Importing views...")
-from app.ui.views.pos_view import POSView
-print("[DIAGNOSTIC] ... POSView imported successfully.")
-from app.ui.views.product_view import ProductView
-print("[DIAGNOSTIC] ... ProductView imported successfully.")
-from app.ui.views.customer_view import CustomerView
-print("[DIAGNOSTIC] ... CustomerView imported successfully.")
-from app.ui.views.inventory_view import InventoryView
-print("[DIAGNOSTIC] ... InventoryView imported successfully.")
-from app.ui.views.reports_view import ReportsView
-print("[DIAGNOSTIC] ... ReportsView imported successfully.")
-from app.ui.views.settings_view import SettingsView
-print("[DIAGNOSTIC] ... SettingsView imported successfully.")
-print("[DIAGNOSTIC] All views imported.")
-
-
-class MainWindow(QMainWindow):
-    """The main application window."""
-    def __init__(self, core: ApplicationCore):
-        super().__init__()
-        print("[DIAGNOSTIC] MainWindow.__init__ started.")
-        self.core = core
-        self.async_worker: AsyncWorker = core.async_worker
-        self.setWindowTitle("SG Point-of-Sale System")
-        self.setGeometry(100, 100, 1440, 900)
-
-        self.stacked_widget = QStackedWidget()
-        self.setCentralWidget(self.stacked_widget)
-
-        # --- Initialize and add all primary views ONE BY ONE ---
-        print("[DIAGNOSTIC] Instantiating POSView...")
-        self.pos_view = POSView(self.core)
-        self.stacked_widget.addWidget(self.pos_view)
-        print("[DIAGNOSTIC] ... POSView instantiated and added.")
-
-        print("[DIAGNOSTIC] Instantiating ProductView...")
-        self.product_view = ProductView(self.core)
-        self.stacked_widget.addWidget(self.product_view)
-        print("[DIAGNOSTIC] ... ProductView instantiated and added.")
-        
-        print("[DIAGNOSTIC] Instantiating CustomerView...")
-        self.customer_view = CustomerView(self.core)
-        self.stacked_widget.addWidget(self.customer_view)
-        print("[DIAGNOSTIC] ... CustomerView instantiated and added.")
-        
-        print("[DIAGNOSTIC] Instantiating InventoryView...")
-        self.inventory_view = InventoryView(self.core)
-        self.stacked_widget.addWidget(self.inventory_view)
-        print("[DIAGNOSTIC] ... InventoryView instantiated and added.")
-
-        print("[DIAGNOSTIC] Instantiating ReportsView...")
-        self.reports_view = ReportsView(self.core)
-        self.stacked_widget.addWidget(self.reports_view)
-        print("[DIAGNOSTIC] ... ReportsView instantiated and added.")
-
-        print("[DIAGNOSTIC] Instantiating SettingsView...")
-        self.settings_view = SettingsView(self.core)
-        self.stacked_widget.addWidget(self.settings_view)
-        print("[DIAGNOSTIC] ... SettingsView instantiated and added.")
-        
-        print("[DIAGNOSTIC] All views instantiated and added.")
-        self.stacked_widget.setCurrentWidget(self.pos_view)
-        self._create_menu()
-        print("[DIAGNOSTIC] MainWindow.__init__ finished.")
-
-    def _create_menu(self):
-        """Creates the main menu bar with complete navigation."""
-        menu_bar = self.menuBar()
-        
-        file_menu = menu_bar.addMenu("&File")
-        exit_action = file_menu.addAction("E&xit")
-        exit_action.triggered.connect(self.close)
-
-        pos_menu = menu_bar.addMenu("&POS")
-        pos_action = pos_menu.addAction("Sales Screen")
-        pos_action.triggered.connect(lambda: self.stacked_widget.setCurrentWidget(self.pos_view))
-
-        data_menu = menu_bar.addMenu("&Data Management")
-        data_menu.addAction("Products", lambda: self.stacked_widget.setCurrentWidget(self.product_view))
-        data_menu.addAction("Customers", lambda: self.stacked_widget.setCurrentWidget(self.customer_view))
-        
-        inventory_menu = menu_bar.addMenu("&Inventory")
-        inventory_menu.addAction("Stock Management", lambda: self.stacked_widget.setCurrentWidget(self.inventory_view))
-        
-        reports_menu = menu_bar.addMenu("&Reports")
-        reports_menu.addAction("Business Reports", lambda: self.stacked_widget.setCurrentWidget(self.reports_view))
-        
-        settings_menu = menu_bar.addMenu("&Settings")
-        settings_menu.addAction("Application Settings", lambda: self.stacked_widget.setCurrentWidget(self.settings_view))
-
-    def closeEvent(self, event: QEvent) -> None:
-        """Handles window close event to gracefully shut down the application core."""
-        # This is the correct shutdown logic from the previous fix.
-        if self.core:
-            self.core.shutdown()
-        event.accept()
-
 
 ```
 
@@ -3041,17 +2651,23 @@ class ProductView(QWidget):
 The main window of the SG-POS application.
 This QMainWindow acts as the shell, hosting different views like the POS screen,
 inventory management, etc., and providing navigation.
+
+This version implements lazy loading for all non-default views to improve
+startup performance.
 """
 import sys
+from typing import Dict, Optional, Type
+
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout,
-    QStackedWidget, QMenuBar, QMenu
+    QMainWindow, QWidget,
+    QStackedWidget, QMenuBar
 )
 from PySide6.QtCore import Slot, QEvent
 
 from app.core.application_core import ApplicationCore
 from app.core.async_bridge import AsyncWorker
 
+# Import all view classes that will be lazy-loaded
 from app.ui.views.pos_view import POSView
 from app.ui.views.product_view import ProductView
 from app.ui.views.customer_view import CustomerView
@@ -3071,45 +2687,67 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        self.pos_view = POSView(self.core)
-        self.product_view = ProductView(self.core)
-        self.customer_view = CustomerView(self.core)
-        self.inventory_view = InventoryView(self.core)
-        self.reports_view = ReportsView(self.core)
-        self.settings_view = SettingsView(self.core)
+        # --- Lazy Loading Implementation ---
+        # 1. A dictionary to hold view definitions and cache instances
+        self.views: Dict[str, Dict[str, Optional[Type[QWidget]]]] = {
+            "product":   {"class": ProductView,   "instance": None},
+            "customer":  {"class": CustomerView,  "instance": None},
+            "inventory": {"class": InventoryView, "instance": None},
+            "reports":   {"class": ReportsView,   "instance": None},
+            "settings":  {"class": SettingsView,  "instance": None},
+        }
 
+        # 2. Eagerly create and show only the default view
+        self.pos_view = POSView(self.core)
         self.stacked_widget.addWidget(self.pos_view)
-        self.stacked_widget.addWidget(self.product_view)
-        self.stacked_widget.addWidget(self.customer_view)
-        self.stacked_widget.addWidget(self.inventory_view)
-        self.stacked_widget.addWidget(self.reports_view)
-        self.stacked_widget.addWidget(self.settings_view)
-        
         self.stacked_widget.setCurrentWidget(self.pos_view)
+        
+        # 3. Create the menu, which will connect actions to the lazy loader
         self._create_menu()
 
     def _create_menu(self):
+        """Creates the main menu bar with navigation actions wired for lazy loading."""
         menu_bar = self.menuBar()
         
         file_menu = menu_bar.addMenu("&File")
-        exit_action = file_menu.addAction("E&xit")
-        exit_action.triggered.connect(self.close)
+        file_menu.addAction("E&xit", self.close)
 
         pos_menu = menu_bar.addMenu("&POS")
         pos_menu.addAction("Sales Screen", lambda: self.stacked_widget.setCurrentWidget(self.pos_view))
 
         data_menu = menu_bar.addMenu("&Data Management")
-        data_menu.addAction("Products", lambda: self.stacked_widget.setCurrentWidget(self.product_view))
-        data_menu.addAction("Customers", lambda: self.stacked_widget.setCurrentWidget(self.customer_view))
+        data_menu.addAction("Products", lambda: self._show_view("product"))
+        data_menu.addAction("Customers", lambda: self._show_view("customer"))
         
         inventory_menu = menu_bar.addMenu("&Inventory")
-        inventory_menu.addAction("Stock Management", lambda: self.stacked_widget.setCurrentWidget(self.inventory_view))
+        inventory_menu.addAction("Stock Management", lambda: self._show_view("inventory"))
         
         reports_menu = menu_bar.addMenu("&Reports")
-        reports_menu.addAction("Business Reports", lambda: self.stacked_widget.setCurrentWidget(self.reports_view))
+        reports_menu.addAction("Business Reports", lambda: self._show_view("reports"))
         
         settings_menu = menu_bar.addMenu("&Settings")
-        settings_menu.addAction("Application Settings", lambda: self.stacked_widget.setCurrentWidget(self.settings_view))
+        settings_menu.addAction("Application Settings", lambda: self._show_view("settings"))
+
+    def _show_view(self, view_key: str):
+        """
+        Generic handler for showing a view. Creates the view on first request.
+        
+        Args:
+            view_key: The key corresponding to the view in the self.views dictionary.
+        """
+        if view_key not in self.views:
+            return
+
+        view_info = self.views[view_key]
+        
+        # If the view instance hasn't been created yet, create and cache it
+        if view_info["instance"] is None:
+            view_class = view_info["class"]
+            view_info["instance"] = view_class(self.core)
+            self.stacked_widget.addWidget(view_info["instance"])
+
+        # Set the current widget to the now-guaranteed-to-exist instance
+        self.stacked_widget.setCurrentWidget(view_info["instance"])
 
     def closeEvent(self, event: QEvent) -> None:
         """Handles window close event to gracefully shut down the application core."""
@@ -3546,6 +3184,27 @@ class BaseService:
                 return Success(record)
         except Exception as e:
             return Failure(f"Database error fetching {self.model.__tablename__} by ID: {e}")
+
+    async def get_by_ids(self, record_ids: List[UUID]) -> Result[List[ModelType], str]:
+        """
+        Fetches multiple records by a list of primary keys (IDs).
+        
+        Args:
+            record_ids: A list of UUIDs to fetch.
+        
+        Returns:
+            A Success containing a list of model instances, or a Failure.
+        """
+        if not record_ids:
+            return Success([])
+        try:
+            async with self.core.get_session() as session:
+                stmt = select(self.model).where(self.model.id.in_(record_ids))
+                result = await session.execute(stmt)
+                records = result.scalars().all()
+                return Success(records)
+        except Exception as e:
+            return Failure(f"Database error fetching {self.model.__tablename__} by IDs: {e}")
 
     async def get_all(
         self,
@@ -5553,7 +5212,7 @@ class SalesManager(BaseManager):
         
         # Fetch all product details in one go for efficiency
         product_ids = [item.product_id for item in dto.cart_items]
-        fetched_products_result = await self.product_service.get_by_ids(product_ids) # Assuming get_by_ids exists
+        fetched_products_result = await self.product_service.get_by_ids(product_ids)
         if isinstance(fetched_products_result, Failure):
             return fetched_products_result
         
@@ -7339,11 +6998,11 @@ def downgrade() -> None:
 
 # migrations/versions/d5a6759ef2f7_initial_schema_setup.py
 ```py
-# migrations/script.py.mako
+# File: migrations/versions/d5a6759ef2f7_initial_schema_setup.py
 """Initial schema setup
 
 Revision ID: d5a6759ef2f7
-Revises: None
+Revises: 
 Create Date: 2025-06-16 00:57:37.705263
 
 """
@@ -7359,7 +7018,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ### commands auto generated by Alembic - please adjust! ###
+    # ### commands auto generated by Alembic - adjusted for correctness ###
     op.create_table('companies',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
@@ -7452,7 +7111,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_outlets_company_id_companies'), ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_outlets')),
     sa.UniqueConstraint('company_id', 'code', name='uq_outlet_company_code'),
-    sa.UniqueConstraint('company_id', 'name', name='uq_outlet_company_name'),
     schema='sgpos'
     )
     op.create_index(op.f('ix_sgpos_outlets_company_id'), 'outlets', ['company_id'], unique=False, schema='sgpos')
@@ -7540,9 +7198,9 @@ def upgrade() -> None:
     sa.Column('company_id', sa.UUID(), nullable=False),
     sa.Column('entry_number', sa.String(length=50), nullable=False),
     sa.Column('entry_date', sa.Date(), nullable=False),
-    sa.Column('description', sa.Text(), nullable=False),
-    sa.Column('source_transaction_id', sa.UUID(), nullable=True),
-    sa.Column('source_transaction_type', sa.String(length=50), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('reference_id', sa.UUID(), nullable=True),
+    sa.Column('reference_type', sa.String(length=50), nullable=True),
     sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('created_by_user_id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -7556,7 +7214,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_sgpos_journal_entries_company_id'), 'journal_entries', ['company_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_journal_entries_created_by_user_id'), 'journal_entries', ['created_by_user_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_sgpos_journal_entries_source_transaction_id'), 'journal_entries', ['source_transaction_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entries_reference_id'), 'journal_entries', ['reference_id'], unique=False, schema='sgpos')
     op.create_table('products',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('company_id', sa.UUID(), nullable=False),
@@ -7581,6 +7239,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('company_id', 'sku', name='uq_product_company_sku'),
     schema='sgpos'
     )
+    op.create_index(op.f('ix_sgpos_products_barcode'), 'products', ['barcode'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_products_category_id'), 'products', ['category_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_products_company_id'), 'products', ['company_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_products_supplier_id'), 'products', ['supplier_id'], unique=False, schema='sgpos')
@@ -7640,13 +7299,13 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['outlet_id'], ['sgpos.outlets.id'], name=op.f('fk_sales_transactions_outlet_id_outlets')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_sales_transactions')),
     sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'),
-    sa.UniqueConstraint('transaction_number', name=op.f('uq_sales_transactions_transaction_number')),
     schema='sgpos'
     )
     op.create_index(op.f('ix_sgpos_sales_transactions_cashier_id'), 'sales_transactions', ['cashier_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_sales_transactions_company_id'), 'sales_transactions', ['company_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_sales_transactions_customer_id'), 'sales_transactions', ['customer_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_sales_transactions_outlet_id'), 'sales_transactions', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_transaction_date'), 'sales_transactions', ['transaction_date'], unique=False, schema='sgpos')
     op.create_table('user_roles',
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('role_id', sa.UUID(), nullable=False),
@@ -7666,7 +7325,7 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.CheckConstraint('(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) OR (debit_amount = 0 AND credit_amount = 0)', name=op.f('ck_journal_entry_lines_chk_debit_or_credit')),
+    sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name=op.f('ck_journal_entry_lines_debit_or_credit_check')),
     sa.ForeignKeyConstraint(['account_id'], ['sgpos.chart_of_accounts.id'], name=op.f('fk_journal_entry_lines_account_id_chart_of_accounts')),
     sa.ForeignKeyConstraint(['journal_entry_id'], ['sgpos.journal_entries.id'], name=op.f('fk_journal_entry_lines_journal_entry_id_journal_entries'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_journal_entry_lines')),
@@ -7681,6 +7340,7 @@ def upgrade() -> None:
     sa.Column('amount', sa.Numeric(precision=19, scale=2), nullable=False),
     sa.Column('reference_number', sa.String(length=100), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['payment_method_id'], ['sgpos.payment_methods.id'], name=op.f('fk_payments_payment_method_id_payment_methods')),
     sa.ForeignKeyConstraint(['sales_transaction_id'], ['sgpos.sales_transactions.id'], name=op.f('fk_payments_sales_transaction_id_sales_transactions'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_payments')),
@@ -7775,6 +7435,7 @@ def upgrade() -> None:
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('created_by_user_id', sa.UUID(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.CheckConstraint("movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')", name=op.f('ck_stock_movements_chk_stock_movement_type')),
     sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_stock_movements_company_id_companies')),
     sa.ForeignKeyConstraint(['created_by_user_id'], ['sgpos.users.id'], name=op.f('fk_stock_movements_created_by_user_id_users')),
     sa.ForeignKeyConstraint(['outlet_id'], ['sgpos.outlets.id'], name=op.f('fk_stock_movements_outlet_id_outlets')),
@@ -7820,6 +7481,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_sgpos_journal_entry_lines_account_id'), table_name='journal_entry_lines', schema='sgpos')
     op.drop_table('journal_entry_lines', schema='sgpos')
     op.drop_table('user_roles', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transactions_transaction_date'), table_name='sales_transactions', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_sales_transactions_outlet_id'), table_name='sales_transactions', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_sales_transactions_customer_id'), table_name='sales_transactions', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_sales_transactions_company_id'), table_name='sales_transactions', schema='sgpos')
@@ -7833,8 +7495,9 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_sgpos_products_supplier_id'), table_name='products', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_products_company_id'), table_name='products', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_products_category_id'), table_name='products', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_products_barcode'), table_name='products', schema='sgpos')
     op.drop_table('products', schema='sgpos')
-    op.drop_index(op.f('ix_sgpos_journal_entries_source_transaction_id'), table_name='journal_entries', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_journal_entries_reference_id'), table_name='journal_entries', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_journal_entries_created_by_user_id'), table_name='journal_entries', schema='sgpos')
     op.drop_index(op.f('ix_sgpos_journal_entries_company_id'), table_name='journal_entries', schema='sgpos')
     op.drop_table('journal_entries', schema='sgpos')
@@ -8017,6 +7680,551 @@ else:
 
 # tests/unit/__init__.py
 ```py
+
+```
+
+# 'README (draft - to be updated to reflect current state of the codebase more accurately).md'
+```md
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Logo" width="600"/>
+</p>
+
+<h1 align="center">SG Point-of-Sale (SG-POS) System</h1>
+
+<p align="center">
+  <strong>An enterprise-grade, open-source Point-of-Sale system, meticulously engineered for Singapore's SMB retail landscape.</strong>
+</p>
+
+<p align="center">
+  <!-- Badges -->
+  <a href="#">
+    <img src="https://img.shields.io/badge/Status-In%20Development-orange" alt="Project Status">
+  </a>
+  <a href="https://github.com/your-org/sg-pos-system/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.11+-3776AB.svg" alt="Python 3.11+">
+  </a>
+  <a href="https://www.qt.io/">
+    <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41CD52.svg" alt="PySide6">
+  </a>
+  <a href="https://www.postgresql.org/">
+    <img src="https://img.shields.io/badge/Database-PostgreSQL-336791.svg" alt="PostgreSQL">
+  </a>
+  <a href="https://github.com/psf/black">
+    <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black">
+  </a>
+</p>
+
+---
+
+## 📖 Table of Contents
+
+*   [1. Introduction: What is SG-POS?](#1-introduction-what-is-sg-pos)
+*   [2. Current Features & Status](#2-current-features--status)
+*   [3. Architectural Deep Dive](#3-architectural-deep-dive)
+    *   [The Layered Architecture](#the-layered-architecture)
+    *   [Module Interaction Flowchart](#module-interaction-flowchart)
+*   [4. Codebase Deep Dive](#4-codebase-deep-dive)
+    *   [Project File Hierarchy](#project-file-hierarchy)
+    *   [Key File & Directory Descriptions](#key-file--directory-descriptions)
+*   [5. Technology Stack](#5-technology-stack)
+*   [6. Developer Setup & Deployment Guide](#6-developer-setup--deployment-guide)
+    *   [Prerequisites](#prerequisites)
+    *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
+*   [7. User Guide: Running the Application](#7-user-guide-running-the-application)
+*   [8. Project Roadmap](#8-project-roadmap)
+    *   [Immediate Goals (v1.0.1)](#immediate-goals-v101)
+    *   [Long-Term Goals (v1.1+)](#long-term-goals-v11)
+*   [9. How to Contribute](#9-how-to-contribute)
+*   [10. License](#10-license)
+
+---
+
+## **1. Introduction: What is SG-POS?**
+
+**SG-POS** is a free and open-source Point-of-Sale system, engineered from the ground up to address the specific operational and regulatory challenges faced by Small to Medium-sized Businesses (SMBs) in Singapore. It aims to provide the power and polish of expensive enterprise systems in an accessible, modern, and maintainable package.
+
+This project is built with an obsessive focus on quality, both in the user experience and, most importantly, in the engineering. It serves not only as a functional tool but also as a reference implementation for professional-grade Python application architecture.
+
+---
+
+## **2. Current Features & Status**
+
+The application is currently in a feature-complete skeleton state, with the core architecture and many key workflows fully implemented.
+
+| Feature Area                      | Status                  | Notes                                                                                                         |
+| --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Sales & Checkout**              | ✅ **Functional**       | Core sales processing, cart management, and payment collection via the `POSView` and `PaymentDialog` are working. |
+| **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers are implemented in `CustomerView`.      |
+| **Inventory Management**          | ✅ **Functional**       | `InventoryView` provides a stock summary, PO management, and stock movement history.                          |
+| **Purchase Orders & Stock-ins**   | ✅ **Functional**       | Creation of Purchase Orders and stock adjustments are fully implemented via dialogs.                          |
+| **Reporting & Analytics**         | ✅ **Functional**       | The backend `ReportingManager` and `GstManager` correctly generate data for all implemented reports.          |
+| **User & Company Settings**       | 🟡 **Partially Implemented** | `SettingsView` can display company and user info. Role assignment logic is a backend `TODO`.                |
+| **Product Management**            | 🔴 **Placeholder**      | The `ProductView` UI is a placeholder. The backend logic is complete, but the UI is not yet functional.     |
+
+---
+
+## **3. Architectural Deep Dive**
+
+SG-POS is built on a set of robust architectural principles designed for maintainability and scalability.
+
+### The Layered Architecture
+
+Our architecture strictly separates the application into four logical layers:
+
+1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic.
+2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. `Managers` orchestrate workflows and enforce business rules, using `DTOs` (Data Transfer Objects) as data contracts.
+3.  **Data Access Layer (`app/services`):** Implements the Repository Pattern. It provides a clean, abstract API (e.g., `product_service.get_by_sku()`) for database operations, hiding SQL complexity.
+4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to PostgreSQL tables.
+
+### Module Interaction Flowchart
+
+The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them.
+
+```mermaid
+graph TD
+    subgraph "User Interface (app/ui)"
+        direction TB
+        A[Views & Dialogs] -- "1. User Action" --> B{Async Bridge};
+    end
+
+    subgraph "Business Logic (app/business_logic)"
+        direction TB
+        C[Managers] --> D[Data Transfer Objects (DTOs)];
+    end
+
+    subgraph "Data Access (app/services)"
+        direction TB
+        E[Services (Repositories)];
+    end
+
+    subgraph "Data Model (app/models)"
+        direction TB
+        F[ORM Models (SQLAlchemy)];
+    end
+    
+    subgraph "Database"
+        direction TB
+        G[PostgreSQL];
+    end
+
+    subgraph "Application Core (app/core)"
+        direction TB
+        H[ApplicationCore (DI Container)] -- Manages --> I[Async Worker];
+    end
+
+    %% Interactions
+    B -- "2. Submits Task to Worker Thread" --> I;
+    I -- "3. Executes Task" --> C;
+    H -- Provides Dependencies --> C;
+    C -- "4. Orchestrates Logic" --> E;
+    E -- "5. Queries Database" --> F;
+    F -- "6. Maps to" --> G;
+    E -- "7. Returns ORM Models" --> C;
+    C -- "8. Converts to DTOs" --> D;
+    C -- "9. Returns Result(DTO)" --> I;
+    I -- "10. Signals Result" --> B;
+    B -- "11. Delivers to UI Callback" --> A;
+
+```
+---
+
+## **4. Codebase Deep Dive**
+
+### Project File Hierarchy
+
+```
+sg-pos-system/
+├── app/
+│   ├── core/
+│   ├── models/
+│   ├── services/
+│   ├── business_logic/
+│   │   ├── dto/
+│   │   └── managers/
+│   ├── ui/
+│   │   ├── dialogs/
+│   │   ├── resources/
+│   │   ├── views/
+│   │   └── widgets/
+│   ├── integrations/
+│   └── main.py
+├── migrations/
+│   ├── versions/
+│   └── env.py
+├── scripts/
+│   └── database/
+├── tests/
+├── .env.example
+├── alembic.ini
+├── docker-compose.dev.yml
+└── pyproject.toml
+```
+
+### Key File & Directory Descriptions
+
+| Path                             | Description                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `pyproject.toml`                 | **Project Definition.** Manages all dependencies, project metadata, and development tool configurations.     |
+| `docker-compose.dev.yml`         | **Database Service.** Defines and configures the PostgreSQL database container for local development.        |
+| `alembic.ini` / `migrations/`    | **Database Migrations.** Configuration and scripts for managing database schema evolution using Alembic. |
+| `app/main.py`                    | **Application Entry Point.** Initializes the application core, the UI, and starts the event loop.        |
+| `app/core/`                      | **The Backbone.** Contains the `ApplicationCore` (DI container), `async_bridge`, `config`, and `Result` pattern. |
+| `app/models/`                    | **Persistence Layer.** Defines all SQLAlchemy ORM models, mirroring the database tables.               |
+| `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic.         |
+| `app/business_logic/managers/`   | **Business Logic Layer.** Orchestrates workflows, enforces business rules, and makes decisions.        |
+| `app/business_logic/dto/`        | **Data Contracts.** Pydantic models that define the structure of data passed between layers.           |
+| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, inventory, and settings panels. |
+| `app/ui/dialogs/`                | **Interactive Dialogs.** Contains dialog windows for specific operations like making a payment or a PO. |
+
+---
+
+## **5. Technology Stack**
+
+This project uses a modern, professional-grade technology stack.
+
+| Category          | Technology                                         | Rationale                                                                                                   |
+| ----------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Language**      | Python 3.11+                                       | Modern features, performance improvements, and strong ecosystem.                                            |
+| **GUI Framework** | PySide6 (Qt 6)                                     | The gold standard for professional, high-performance, cross-platform desktop applications in Python.        |
+| **Database**      | PostgreSQL 16+                                     | Unmatched reliability, scalability, and feature set for handling critical business and financial data.      |
+| **ORM**           | SQLAlchemy 2.0                                     | Industry-leading Object-Relational Mapper with powerful features and excellent async support.               |
+| **DB Migrations** | Alembic                                            | The standard for managing database schema changes with SQLAlchemy.                                          |
+| **Async**         | `asyncio`                                          | Python's native library for writing concurrent code, essential for a responsive application.                |
+| **Testing**       | `pytest`, `pytest-qt`, `pytest-asyncio`            | A powerful and flexible testing ecosystem that covers all aspects of our application (core, UI, async).      |
+| **Packaging**     | Poetry                                             | Modern, reliable dependency management and packaging that guarantees reproducible environments.             |
+| **Code Quality**  | Black (Formatter), Ruff (Linter), MyPy (Type Checker)| A trifecta of tools to enforce code style, catch bugs early, and ensure long-term maintainability.          |
+
+---
+
+## **6. Developer Setup & Deployment Guide**
+
+This guide provides step-by-step instructions to set up a complete local development environment.
+
+### Prerequisites
+
+*   **Git:** For version control.
+*   **Python 3.11+:** Make sure it's installed and available in your `PATH`.
+*   **Poetry:** For managing dependencies. See the [official installation guide](https://python-poetry.org/docs/#installation).
+*   **Docker & Docker Compose:** To run the PostgreSQL database locally without needing to install it on your system.
+
+### Step-by-Step Setup Guide
+
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/your-org/sg-pos-system.git
+    cd sg-pos-system
+    ```
+
+2.  **Configure Environment Variables**
+    Copy the example environment file. No changes are needed for a standard local setup.
+    ```bash
+    cp .env.example .env.dev
+    ```
+
+3.  **Start the Database Server**
+    This command downloads the PostgreSQL image (if not present) and starts the database container in the background.
+    ```bash
+    docker compose -f docker-compose.dev.yml up -d
+    ```
+    You can check if the database is ready by running `docker logs sgpos_dev_db`.
+
+4.  **Install Project Dependencies**
+    Poetry will read the `pyproject.toml` file, create a virtual environment, and install all necessary production and development packages.
+    ```bash
+    poetry install
+    ```
+
+5.  **Activate the Virtual Environment**
+    All subsequent commands must be run inside this environment to use the installed packages.
+    ```bash
+    poetry shell
+    ```
+
+6.  **Run Database Migrations**
+    This command connects to the database and creates all the tables defined in `app/models`.
+    ```bash
+    alembic upgrade head
+    ```
+
+7.  **Run the Application**
+    You are now ready to launch the POS system.
+    ```bash
+    python app/main.py
+    ```
+
+---
+
+## **7. User Guide: Running the Application**
+
+Once the application is running, here is a brief guide on how to use it:
+
+*   **Main Window:** The application opens to the main `POSView`, ready for a sale.
+*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, `Inventory`, etc.) to switch between different sections of the application.
+*   **Making a Sale:**
+    1.  In the `POSView`, use the "Product" search bar on the right to find an item by its SKU.
+    2.  Click "Add to Cart". The item will appear in the "Current Sale Items" list on the left.
+    3.  When all items are added, click the green "PAY" button.
+    4.  In the `PaymentDialog`, add one or more payment methods until the balance is zero.
+    5.  Click "Finalize Sale" to complete the transaction.
+*   **Managing Data:** Navigate to `Data Management > Customers` or `Inventory > Current Stock` to view, add, and edit data. Most views follow a similar pattern of a search bar, an action button (`Add`, `Edit`), and a table displaying the data.
+
+---
+
+## **8. Project Roadmap**
+
+### Immediate Goals (v1.0.1)
+
+These tasks focus on fixing bugs, completing existing features, and improving developer experience.
+
+*   [ ] **Fix Product Dialog:** Implement the asynchronous save logic in `app/ui/dialogs/product_dialog.py`.
+*   [ ] **Complete User Roles:** Implement the role assignment logic in `app/business_logic/managers/user_manager.py`.
+*   [ ] **Implement Product View:** Build a functional `QAbstractTableModel` and data loading logic for `app/ui/views/product_view.py`.
+*   [ ] **Align Database Migrations:** Correct the initial Alembic migration file to match the latest ORM models, especially in `journal_entries`.
+*   [ ] **Create Contribution Docs:** Write the `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` files.
+
+### Long-Term Goals (v1.1+)
+
+These are larger features that build on the stable foundation.
+
+*   [ ] **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts).
+*   [ ] **Multi-Location Inventory:** Build features for transferring stock between different outlets.
+*   [ ] **Accounting Integration:** Add functionality to export sales and purchase data to formats compatible with Xero and QuickBooks.
+*   [ ] **E-commerce Connector:** Develop an integration with Shopify to sync products and inventory levels.
+*   [ ] **Cloud Backend (v2.0):** Architect a cloud-based version of the backend to support a mobile companion app and centralized data management for multi-outlet businesses.
+
+---
+
+## **9. How to Contribute**
+
+We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued.
+
+**Our contribution workflow is simple:**
+
+1.  **Find an issue:** Look for issues tagged with `good first issue` or `help wanted` on our GitHub Issues page.
+2.  **Fork the repository:** Create your own copy of the project.
+3.  **Create a feature branch:** `git checkout -b feature/your-awesome-feature`.
+4.  **Make your changes:** Write your code and make sure to add corresponding tests.
+5.  **Run all checks:** Before pushing, ensure your code passes all quality checks: `pytest`, `black .`, `ruff .`, `mypy app`.
+6.  **Submit a Pull Request (PR):** Push your branch to your fork and open a PR against our `main` branch.
+7.  **Code Review:** Your PR will be reviewed by the maintainers.
+
+*(A detailed CONTRIBUTING.md file is in the repo).*
+
+---
+
+## **10. License**
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for full details. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.
+
+```
+
+# CODE_OF_CONDUCT.md
+```md
+# Contributor Covenant Code of Conduct
+
+## Our Pledge
+
+We as members, contributors, and leaders pledge to make participation in our
+community a harassment-free experience for everyone, regardless of age, body
+size, visible or invisible disability, ethnicity, sex characteristics, gender
+identity and expression, level of experience, education, socio-economic status,
+nationality, personal appearance, race, religion, or sexual identity
+and orientation.
+
+We pledge to act and interact in ways that contribute to an open, welcoming,
+diverse, inclusive, and healthy community.
+
+## Our Standards
+
+Examples of behavior that contributes to a positive environment for our
+community include:
+
+*   Demonstrating empathy and kindness toward other people
+*   Being respectful of differing opinions, viewpoints, and experiences
+*   Giving and gracefully accepting constructive feedback
+*   Accepting responsibility and apologizing to those affected by our mistakes,
+    and learning from the experience
+*   Focusing on what is best not just for us as individuals, but for the
+    overall community
+
+Examples of unacceptable behavior include:
+
+*   The use of sexualized language or imagery, and sexual attention or
+    advances of any kind
+*   Trolling, insulting or derogatory comments, and personal or political attacks
+*   Public or private harassment
+*   Publishing others' private information, such as a physical or email
+    address, without their explicit permission
+*   Other conduct which could reasonably be considered inappropriate in a
+    professional setting
+
+## Our Responsibilities
+
+Project maintainers are responsible for clarifying and enforcing our standards of
+acceptable behavior and will take appropriate and fair corrective action in
+response to any behavior that they deem inappropriate, threatening, offensive,
+or harmful.
+
+Project maintainers have the right and responsibility to remove, edit, or reject
+comments, commits, code, wiki edits, issues, and other contributions that are
+not aligned to this Code of Conduct, and will communicate reasons for moderation
+decisions when appropriate.
+
+## Scope
+
+This Code of Conduct applies within all community spaces, and also applies when
+an individual is officially representing the community in public spaces.
+Examples of representing our community include using an official e-mail address,
+posting via an official social media account, or acting as an appointed
+representative at an online or offline event.
+
+## Enforcement
+
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the project team responsible for enforcement at
+**sgpos.maintainers@example.com**.
+All complaints will be reviewed and investigated promptly and fairly.
+
+All community leaders are obligated to respect the privacy and security of the
+reporter of any incident.
+
+## Enforcement Guidelines
+
+Community leaders will follow these Community Impact Guidelines in determining
+the consequences for any action they deem in violation of this Code of Conduct:
+
+### 1. Correction
+
+**Community Impact**: Use of inappropriate language or other behavior deemed
+unprofessional or unwelcome in the community.
+
+**Consequence**: A private, written warning from community leaders, providing
+clarity around the nature of the violation and an explanation of why the
+behavior was inappropriate. A public apology may be requested.
+
+### 2. Warning
+
+**Community Impact**: A violation through a single incident or series
+of actions.
+
+**Consequence**: A warning with consequences for continued behavior. No
+interaction with the people involved, including unsolicited interaction with
+those enforcing the Code of Conduct, for a specified period of time. This
+includes avoiding interaction in community spaces as well as external channels
+like social media. Violating these terms may lead to a temporary or
+permanent ban.
+
+### 3. Temporary Ban
+
+**Community Impact**: A serious violation of community standards, including
+sustained inappropriate behavior.
+
+**Consequence**: A temporary ban from any sort of interaction or public
+communication with the community for a specified period of time. No public or
+private interaction with the people involved, including unsolicited interaction
+with those enforcing the Code of Conduct, is allowed during this period.
+Violating these terms may lead to a permanent ban.
+
+### 4. Permanent Ban
+
+**Community Impact**: Demonstrating a pattern of violation of community
+standards, including sustained inappropriate behavior, harassment of an
+individual, or aggression toward or disparagement of classes of individuals.
+
+**Consequence**: A permanent ban from any sort of public interaction within
+the community.
+
+## Attribution
+
+This Code of Conduct is adapted from the [Contributor Covenant][homepage],
+version 2.1, available at
+[https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
+
+[homepage]: https://www.contributor-covenant.org
+[v2.1]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
+
+
+```
+
+# CONTRIBUTING.md
+```md
+# Contributing to the SG-POS System
+
+First off, thank you for considering contributing to the SG-POS System! It's people like you that make open source such a powerful and rewarding ecosystem. Your contributions will directly help small business owners in Singapore run their businesses more effectively.
+
+This document provides guidelines for contributing to the project. We want to make it as easy and transparent as possible for you to get involved.
+
+## Code of Conduct
+
+By participating in this project, you are expected to uphold our [Code of Conduct](CODE_OF_CONDUCT.md). Please read it before you start. We are committed to fostering an open, welcoming, and harassment-free environment.
+
+## How Can I Contribute?
+
+There are many ways to contribute, and all of them are valuable.
+
+*   **Reporting Bugs:** If you find a bug, please open an issue on our GitHub repository. Provide a clear title, a detailed description of the bug, steps to reproduce it, and any relevant logs or screenshots.
+*   **Suggesting Enhancements:** If you have an idea for a new feature or an improvement to an existing one, open an issue to start a discussion. This allows us to align on the goals before any code is written.
+*   **Improving Documentation:** Good documentation is crucial. If you find gaps in our `README.md`, docstrings, or other project documents, feel free to submit a pull request with your improvements.
+*   **Writing Code:** If you're ready to write some code, look for issues tagged with `help wanted` or `good first issue`.
+
+## Your First Code Contribution: The Pull Request Process
+
+We follow a standard fork-and-pull workflow for code contributions.
+
+1.  **Fork the repository** on GitHub to create your own copy of the project.
+
+2.  **Set up your development environment** by following the detailed [Developer Setup & Deployment Guide](README.md#6-developer-setup--deployment-guide) in our main `README.md`.
+
+3.  **Create a new branch** from the `main` branch in your fork. Please use a descriptive branch name.
+    *   For new features: `feature/my-awesome-feature`
+    *   For bug fixes: `fix/correct-calculation-bug`
+    *   For documentation: `docs/update-readme`
+    ```bash
+    git checkout -b feature/your-branch-name
+    ```
+
+4.  **Make your changes.** Write your code, and don't forget to add or update tests to cover your changes!
+
+5.  **Ensure all quality checks pass.** Before you submit your pull request, run all the local checks to ensure your code adheres to our quality standards.
+    ```bash
+    # Ensure all tests pass
+    pytest
+
+    # Format your code with Black
+    black .
+
+    # Lint your code with Ruff
+    ruff . --fix
+
+    # Check static types with MyPy
+    mypy app
+    ```
+    The pre-commit hooks, if configured, will help automate this process.
+
+6.  **Commit your changes** with a clear and descriptive commit message. We recommend following the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification.
+    *   Example: `feat(sales): Add support for gift card payments`
+    *   Example: `fix(inventory): Prevent negative stock adjustments`
+    ```bash
+    git commit -m "feat(ui): Add new customer search functionality"
+    ```
+
+7.  **Push your branch** to your fork on GitHub.
+    ```bash
+    git push origin feature/your-branch-name
+    ```
+
+8.  **Open a Pull Request (PR)** from your fork's branch to the `main` branch of the official SG-POS repository.
+    *   Provide a clear title for your PR.
+    *   In the description, explain the "what" and "why" of your changes.
+    *   If your PR addresses an existing issue, link it using `Closes #123`.
+
+9.  **Engage in the Code Review.** A maintainer will review your PR. Be prepared to discuss your changes and make adjustments based on the feedback. We aim to be responsive and provide constructive reviews.
+
+Thank you again for your contribution!
+
 
 ```
 
