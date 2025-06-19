@@ -1,3 +1,58 @@
+The application log is clean and shows no errors. The startup sequence is correct and consistent with the previous successful run. The refactoring of `ProductView` and `CustomerView` has not introduced any regressions.
+
+**Conclusion:** The application is stable. We can proceed with the next step in our plan.
+
+---
+
+### **Phase 2 Plan: UI/UX Refinements**
+
+We will now continue the process of applying the `ManagedTableView` widget to the remaining views for a consistent and improved user experience.
+
+**Previous Steps (Completed):**
+*   **Sub-Task 2.1:** Create the `ManagedTableView` Custom Widget.
+*   **Sub-Task 2.2:** Refactor `ProductView` to use `ManagedTableView`.
+*   **Sub-Task 2.3:** Refactor `CustomerView` to use `ManagedTableView`.
+
+**Current Step (To Be Executed):**
+*   **Sub-Task 2.4:** Refactor `InventoryView` to use `ManagedTableView`.
+
+---
+
+### **Phase 2, Sub-Task 2.4: Refactor `InventoryView`**
+
+**Objective:** The `InventoryView` is more complex as it contains multiple tabs, each with its own table. This task involves refactoring all tables within this view to use the `ManagedTableView` widget.
+
+**Execution Plan & Checklist:**
+
+1.  **Modify `app/ui/views/inventory_view.py`:**
+    *   [x] Import the `ManagedTableView` widget.
+    *   [x] **Inventory Summary Tab:**
+        *   [x] In `_create_inventory_summary_tab`, replace `self.inventory_table = QTableView()` with `self.inventory_managed_table = ManagedTableView()`.
+        *   [x] Set the model on the new widget and apply table configurations to `self.inventory_managed_table.table()`.
+        *   [x] Update signal connections (like `doubleClicked`) to use `self.inventory_managed_table.table()`.
+        *   [x] In `_load_inventory_summary`, call `self.inventory_managed_table.show_loading()` at the start.
+        *   [x] In the `_on_done` callback for this load, implement the logic to call `show_table()` or `show_empty("No inventory items found.")`.
+    *   [x] **Purchase Orders Tab:**
+        *   [x] In `_create_purchase_orders_tab`, replace `self.po_table = QTableView()` with `self.po_managed_table = ManagedTableView()`.
+        *   [x] Apply the same refactoring pattern: set model, configure the inner table.
+        *   [x] Update any signal connections to `self.po_managed_table.table()`.
+        *   [x] In `_load_purchase_orders`, call `self.po_managed_table.show_loading()`.
+        *   [x] In the `_on_done` callback, call `show_table()` or `show_empty("No purchase orders found.")`.
+    *   [x] **Stock Movements Tab:**
+        *   [x] In `_create_stock_movements_tab`, replace `self.movements_table = QTableView()` with `self.movements_managed_table = ManagedTableView()`.
+        *   [x] Apply the refactoring pattern.
+        *   [x] In `_load_stock_movements`, call `self.movements_managed_table.show_loading()`.
+        *   [x] In the `_on_done` callback, call `show_table()` or `show_empty("No stock movements for this item.")`.
+
+This plan ensures that every table within the `InventoryView` will now have a consistent, stateful UI.
+
+---
+
+### **Generated and Updated Files**
+
+Here is the complete and updated replacement file for `app/ui/views/inventory_view.py`.
+
+```python
 # File: app/ui/views/inventory_view.py
 """Main View for Inventory Management."""
 from __future__ import annotations
@@ -291,3 +346,5 @@ class InventoryView(QWidget):
                 self.movements_managed_table.show_table() if r.value else self.movements_managed_table.show_empty("No movement history for this item.")
         
         self.async_worker.run_task(self.core.inventory_manager.get_stock_movements_for_product(self.company_id, product_id), on_done_callback=_on_done)
+```
+

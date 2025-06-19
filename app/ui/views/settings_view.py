@@ -16,6 +16,8 @@ from app.business_logic.dto.company_dto import CompanyDTO, CompanyUpdateDTO
 from app.business_logic.dto.user_dto import UserDTO, UserCreateDTO, UserUpdateDTO, RoleDTO
 from app.core.async_bridge import AsyncWorker
 from app.ui.dialogs.user_dialog import UserDialog
+from app.ui.views.payment_method_view import PaymentMethodView
+from app.ui.widgets.managed_table_view import ManagedTableView
 
 class UserTableModel(QAbstractTableModel):
     HEADERS = ["Username", "Full Name", "Email", "Role(s)", "Active"]
@@ -48,18 +50,19 @@ class SettingsView(QWidget):
         self._setup_ui()
         self._connect_signals()
         
-        # Load data when the view is created
+        # Load data for the initially visible tab
         self._load_company_info()
-        self._load_users()
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
 
     def _setup_ui(self):
         self.tab_widget = QTabWidget()
         self.tab_widget.addTab(self._create_company_tab(), "Company Information")
         self.tab_widget.addTab(self._create_users_tab(), "User Management")
-        self.tab_widget.addTab(QLabel("Payment Methods Configuration (Coming Soon)"), "Payment Methods")
+        self.tab_widget.addTab(self._create_payment_methods_tab(), "Payment Methods")
         main_layout = QVBoxLayout(self); main_layout.addWidget(self.tab_widget)
 
-    def _create_company_tab(self):
+    def _create_company_tab(self) -> QWidget:
         tab = QWidget(); layout = QFormLayout(tab)
         self.company_name_input = QLineEdit()
         self.company_reg_no_input = QLineEdit()
@@ -77,7 +80,7 @@ class SettingsView(QWidget):
         layout.addWidget(self.company_save_button)
         return tab
         
-    def _create_users_tab(self):
+    def _create_users_tab(self) -> QWidget:
         tab = QWidget(); layout = QVBoxLayout(tab)
         buttons_layout = QHBoxLayout()
         self.add_user_button = QPushButton("Add New User")
@@ -87,23 +90,42 @@ class SettingsView(QWidget):
         buttons_layout.addWidget(self.add_user_button)
         buttons_layout.addWidget(self.edit_user_button)
         buttons_layout.addWidget(self.deactivate_user_button)
-        self.user_table = QTableView(); self.user_model = UserTableModel([]); self.user_table.setModel(self.user_model)
-        self.user_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.user_table.setSelectionBehavior(QTableView.SelectRows)
-        self.user_table.setSelectionMode(QTableView.SingleSelection)
-        layout.addLayout(buttons_layout); layout.addWidget(self.user_table)
+
+        self.user_managed_table = ManagedTableView()
+        self.user_model = UserTableModel([])
+        self.user_managed_table.set_model(self.user_model)
+        
+        table = self.user_managed_table.table()
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setSelectionBehavior(QTableView.SelectRows)
+        table.setSelectionMode(QTableView.SingleSelection)
+        
+        layout.addLayout(buttons_layout)
+        layout.addWidget(self.user_managed_table)
         return tab
+
+    def _create_payment_methods_tab(self) -> QWidget:
+        payment_method_view = PaymentMethodView(self.core)
+        return payment_method_view
 
     def _connect_signals(self):
         self.company_save_button.clicked.connect(self._on_save_company_info)
         self.add_user_button.clicked.connect(self._on_add_user)
         self.edit_user_button.clicked.connect(self._on_edit_user)
         self.deactivate_user_button.clicked.connect(self._on_deactivate_user)
-        self.user_table.doubleClicked.connect(self._on_edit_user)
+        self.user_managed_table.table().doubleClicked.connect(self._on_edit_user)
+
+    @Slot(int)
+    def _on_tab_changed(self, index: int):
+        """Load data for the newly selected tab."""
+        if index == 0:
+            self._load_company_info()
+        elif index == 1:
+            self._load_users()
+        # The payment methods tab's view loads its own data upon creation.
 
     @Slot()
     def _load_company_info(self):
-        """Loads the current company's information into the form fields."""
         self.company_save_button.setEnabled(False)
         def _on_done(result: Any, error: Optional[Exception]):
             self.company_save_button.setEnabled(True)
@@ -122,7 +144,6 @@ class SettingsView(QWidget):
 
     @Slot()
     def _on_save_company_info(self):
-        """Gathers data from form, creates DTO, and calls manager to save."""
         dto = CompanyUpdateDTO(
             name=self.company_name_input.text().strip(),
             registration_number=self.company_reg_no_input.text().strip(),
@@ -139,15 +160,23 @@ class SettingsView(QWidget):
                 QMessageBox.critical(self, "Save Error", f"Failed to save company info: {error or result.error}")
             elif isinstance(result, Success):
                 QMessageBox.information(self, "Success", "Company information saved successfully.")
-                self._load_company_info() # Refresh data
+                self._load_company_info()
 
         self.async_worker.run_task(self.core.company_manager.update_company(self.company_id, dto), on_done_callback=_on_done)
 
     @Slot()
     def _load_users(self):
+        self.user_managed_table.show_loading()
         def _on_done(r, e):
-            if e or isinstance(r, Failure): QMessageBox.critical(self, "Load Error", f"Failed to load users: {e or r.error}")
-            elif isinstance(r, Success): self.user_model.refresh_data(r.value)
+            if e or isinstance(r, Failure):
+                self.user_model.refresh_data([])
+                self.user_managed_table.show_empty(f"Error: {e or r.error}")
+            elif isinstance(r, Success):
+                self.user_model.refresh_data(r.value)
+                if r.value:
+                    self.user_managed_table.show_table()
+                else:
+                    self.user_managed_table.show_empty("No users found.")
         self.async_worker.run_task(self.core.user_manager.get_all_users(self.company_id), on_done_callback=_on_done)
 
     @Slot()
@@ -158,7 +187,7 @@ class SettingsView(QWidget):
     
     @Slot()
     def _on_edit_user(self):
-        selected_user = self.user_model.get_user_at_row(self.user_table.currentIndex().row())
+        selected_user = self.user_model.get_user_at_row(self.user_managed_table.table().currentIndex().row())
         if not selected_user:
             QMessageBox.information(self, "No Selection", "Please select a user to edit.")
             return
@@ -168,7 +197,7 @@ class SettingsView(QWidget):
 
     @Slot()
     def _on_deactivate_user(self):
-        selected_user = self.user_model.get_user_at_row(self.user_table.currentIndex().row())
+        selected_user = self.user_model.get_user_at_row(self.user_managed_table.table().currentIndex().row())
         if not selected_user:
             QMessageBox.information(self, "No Selection", "Please select a user to deactivate.")
             return
