@@ -6,17 +6,9 @@ This migration creates all tables for the SG-POS system as defined in the
 app/models/ directory. It ensures that all columns, data types, constraints,
 and relationships are correctly established in a new database.
 
-This version fixes the following discrepancies from the original auto-generated file:
-- Adds the missing 'reference_type' column to the 'stock_movements' table.
-- Adds the missing 'variant_id' column, foreign key, and index to 'purchase_order_items' and 'sales_transaction_items'.
-- Corrects the unique constraints on 'purchase_order_items' and 'sales_transaction_items' to include 'variant_id'.
-- Adds missing timestamp columns to the 'journal_entry_lines' table.
-- Corrects the CHECK constraint on 'journal_entry_lines' to accurately reflect accounting principles (debit or credit, not both).
-- Removes the erroneous 'updated_at' column from the immutable 'payments' table to match the ORM.
-
 Revision ID: d5a6759ef2f7
 Revises: 
-Create Date: 2025-06-19 10:00:00.000000
+Create Date: 2025-06-16 00:57:37.705263
 """
 from alembic import op
 import sqlalchemy as sa
@@ -30,12 +22,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Ensure the target schema exists before creating tables within it.
+    # Schema creation should be handled by Alembic's context configuration
+    # in env.py, but we can ensure it exists here as well.
     op.execute("CREATE SCHEMA IF NOT EXISTS sgpos")
 
     # ### Table Creation - Order respects Foreign Key dependencies ###
 
-    # --- Group 1: Tables with no or self-referencing dependencies ---
+    # --- Group 1: Tables with no dependencies ---
     op.create_table('companies',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('name', sa.String(length=255), nullable=False),
@@ -387,8 +380,10 @@ def upgrade() -> None:
         sa.Column('debit_amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('credit_amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
+        # FIX: Added missing timestamp columns to match ORM model
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        # FIX: Corrected check constraint to match ORM model and accounting principles
         sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name=op.f('ck_journal_entry_lines_debit_or_credit_check')),
         sa.ForeignKeyConstraint(['account_id'], ['sgpos.chart_of_accounts.id'], name=op.f('fk_journal_entry_lines_account_id_chart_of_accounts')),
         sa.ForeignKeyConstraint(['journal_entry_id'], ['sgpos.journal_entries.id'], name=op.f('fk_journal_entry_lines_journal_entry_id_journal_entries'), ondelete='CASCADE'),
@@ -437,6 +432,7 @@ def upgrade() -> None:
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('purchase_order_id', sa.UUID(), nullable=False),
         sa.Column('product_id', sa.UUID(), nullable=False),
+        # FIX: Added missing variant_id column
         sa.Column('variant_id', sa.UUID(), nullable=True),
         sa.Column('quantity_ordered', sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column('quantity_received', sa.Numeric(precision=15, scale=4), nullable=False),
@@ -445,19 +441,23 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['product_id'], ['sgpos.products.id'], name=op.f('fk_purchase_order_items_product_id_products')),
         sa.ForeignKeyConstraint(['purchase_order_id'], ['sgpos.purchase_orders.id'], name=op.f('fk_purchase_order_items_purchase_order_id_purchase_orders'), ondelete='CASCADE'),
+        # FIX: Added foreign key for variant_id
         sa.ForeignKeyConstraint(['variant_id'], ['sgpos.product_variants.id'], name=op.f('fk_purchase_order_items_variant_id_product_variants')),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_purchase_order_items')),
+        # FIX: Corrected unique constraint to include variant_id
         sa.UniqueConstraint('purchase_order_id', 'product_id', 'variant_id', name='uq_po_item_po_product_variant'),
         schema='sgpos'
     )
     op.create_index(op.f('ix_sgpos_purchase_order_items_product_id'), 'purchase_order_items', ['product_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_purchase_order_items_purchase_order_id'), 'purchase_order_items', ['purchase_order_id'], unique=False, schema='sgpos')
+    # FIX: Added index for new variant_id column
     op.create_index(op.f('ix_sgpos_purchase_order_items_variant_id'), 'purchase_order_items', ['variant_id'], unique=False, schema='sgpos')
 
     op.create_table('sales_transaction_items',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('sales_transaction_id', sa.UUID(), nullable=False),
         sa.Column('product_id', sa.UUID(), nullable=False),
+        # FIX: Added missing variant_id column
         sa.Column('variant_id', sa.UUID(), nullable=True),
         sa.Column('quantity', sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column('unit_price', sa.Numeric(precision=19, scale=4), nullable=False),
@@ -465,13 +465,16 @@ def upgrade() -> None:
         sa.Column('line_total', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.ForeignKeyConstraint(['product_id'], ['sgpos.products.id'], name=op.f('fk_sales_transaction_items_product_id_products')),
         sa.ForeignKeyConstraint(['sales_transaction_id'], ['sgpos.sales_transactions.id'], name=op.f('fk_sales_transaction_items_sales_transaction_id_sales_transactions'), ondelete='CASCADE'),
+        # FIX: Added foreign key for variant_id
         sa.ForeignKeyConstraint(['variant_id'], ['sgpos.product_variants.id'], name=op.f('fk_sales_transaction_items_variant_id_product_variants')),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_sales_transaction_items')),
+        # FIX: Corrected unique constraint to include variant_id
         sa.UniqueConstraint('sales_transaction_id', 'product_id', 'variant_id', name='uq_sales_item_transaction_product_variant'),
         schema='sgpos'
     )
     op.create_index(op.f('ix_sgpos_sales_transaction_items_product_id'), 'sales_transaction_items', ['product_id'], unique=False, schema='sgpos')
     op.create_index(op.f('ix_sgpos_sales_transaction_items_sales_transaction_id'), 'sales_transaction_items', ['sales_transaction_id'], unique=False, schema='sgpos')
+    # FIX: Added index for new variant_id column
     op.create_index(op.f('ix_sgpos_sales_transaction_items_variant_id'), 'sales_transaction_items', ['variant_id'], unique=False, schema='sgpos')
 
     op.create_table('stock_movements',
@@ -483,6 +486,7 @@ def upgrade() -> None:
         sa.Column('movement_type', sa.String(length=50), nullable=False),
         sa.Column('quantity_change', sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column('reference_id', sa.UUID(), nullable=True),
+        # FIX: Added missing reference_type column
         sa.Column('reference_type', sa.String(length=50), nullable=True),
         sa.Column('notes', sa.Text(), nullable=True),
         sa.Column('created_by_user_id', sa.UUID(), nullable=True),
@@ -611,6 +615,6 @@ def downgrade() -> None:
     op.drop_table('permissions', schema='sgpos')
     op.drop_table('companies', schema='sgpos')
     
-    # Finally, drop the schema itself for a complete teardown
+    # Finally, drop the schema itself
     op.execute("DROP SCHEMA IF EXISTS sgpos CASCADE")
     # ### end Alembic commands ###

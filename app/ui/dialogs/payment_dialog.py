@@ -16,25 +16,17 @@ from app.core.result import Success, Failure
 from app.business_logic.dto.sales_dto import PaymentInfoDTO
 from app.models.sales import PaymentMethod # For type hinting
 
-class PaymentEntry:
-    """Helper class to hold payment details entered by user."""
-    def __init__(self, method_id: uuid.UUID, method_name: str, amount: Decimal):
-        self.method_id = method_id
-        self.method_name = method_name
-        self.amount = amount
-
-    def to_payment_info_dto(self) -> PaymentInfoDTO:
-        """Converts to PaymentInfoDTO."""
-        return PaymentInfoDTO(payment_method_id=self.method_id, amount=self.amount)
-
 class PaymentDialog(QDialog):
     """A dialog for collecting payment for a sales transaction, supporting split tender."""
+
+    # Class constant for table headers to avoid magic numbers
+    PAYMENTS_TABLE_HEADERS = ["Method", "Amount", "Action"]
 
     def __init__(self, core: ApplicationCore, total_due: Decimal, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.core = core
         self.total_due = total_due.quantize(Decimal("0.01"))
-        self.current_payments: List[PaymentEntry] = []
+        self.current_payments: List[PaymentInfoDTO] = [] # REFACTOR: Use DTO directly
         self.available_payment_methods: List[PaymentMethod] = []
 
         self.setWindowTitle("Process Payment")
@@ -70,8 +62,9 @@ class PaymentDialog(QDialog):
         payment_entry_layout.addWidget(self.amount_input)
         payment_entry_layout.addWidget(self.add_payment_button)
 
-        self.payments_table = QTableWidget(0, 3) # Rows, Cols
-        self.payments_table.setHorizontalHeaderLabels(["Method", "Amount", "Action"])
+        # REFACTOR: Use class constant for column count and headers
+        self.payments_table = QTableWidget(0, len(self.PAYMENTS_TABLE_HEADERS))
+        self.payments_table.setHorizontalHeaderLabels(self.PAYMENTS_TABLE_HEADERS)
         self.payments_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.payments_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
@@ -141,8 +134,9 @@ class PaymentDialog(QDialog):
             QMessageBox.warning(self, "Invalid Input", "Please select a payment method and enter a valid amount.")
             return
 
-        payment_entry = PaymentEntry(selected_method_id, selected_method_name, amount)
-        self.current_payments.append(payment_entry)
+        # REFACTOR: Instantiate DTO directly
+        payment_info = PaymentInfoDTO(payment_method_id=selected_method_id, amount=amount)
+        self.current_payments.append(payment_info)
         
         row_idx = self.payments_table.rowCount()
         self.payments_table.insertRow(row_idx)
@@ -173,4 +167,5 @@ class PaymentDialog(QDialog):
         self.accept()
 
     def get_payment_info(self) -> List[PaymentInfoDTO]:
-        return [p.to_payment_info_dto() for p in self.current_payments]
+        # REFACTOR: Simplified return
+        return self.current_payments

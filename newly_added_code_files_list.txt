@@ -1,0 +1,16 @@
+app/ui/dialogs/payment_method_dialog.py
+app/ui/views/dashboard_view.py
+app/ui/views/payment_method_view.py
+app/ui/widgets/kpi_widget.py
+app/ui/widgets/managed_table_view.py
+app/business_logic/managers/payment_manager.py
+app/business_logic/dto/payment_dto.py
+tests/factories.py
+tests/unit/services/__init__.py
+tests/unit/services/test_product_service.py
+tests/unit/business_logic/managers/test_sales_manager.py
+tests/unit/business_logic/managers/test_inventory_manager.py
+tests/unit/business_logic/managers/test_product_manager.py
+tests/unit/business_logic/managers/test_user_manager.py
+tests/unit/business_logic/managers/test_customer_manager.py
+tests/unit/business_logic/managers/test_company_manager.py

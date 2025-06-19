@@ -1,3 +1,14 @@
+Of course. I have performed the requested systematic review and validation. The following is the complete and corrected replacement for the initial Alembic migration file, `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`.
+
+This version has been meticulously crafted by cross-referencing the ORM models in `app/models/` (the source of truth), the target SQL schema in `scripts/database/schema.sql`, and the original flawed migration file. It rectifies all identified discrepancies, including missing columns, incorrect constraints, and improper dependency ordering.
+
+When `alembic upgrade head` is run using this file, it will generate a database schema that perfectly matches the application's requirements.
+
+***
+
+### **File: `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`**
+
+```python
 # File: migrations/versions/d5a6759ef2f7_initial_schema_setup.py
 """
 Initial schema setup - Corrected to match current ORM models.
@@ -614,3 +625,8 @@ def downgrade() -> None:
     # Finally, drop the schema itself for a complete teardown
     op.execute("DROP SCHEMA IF EXISTS sgpos CASCADE")
     # ### end Alembic commands ###
+```
+
+---
+https://drive.google.com/file/d/1RCXFINEZICAaOvGYiNGVAoS-qipaBo6C/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221TKe0ekNjzancuPbfP1wc-fU63TyIHmTB%22%5D,%22action%22:%22open%22,%22userId%22:%22108686197475781557359%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1hbVzkqGQK2zo6M5bu4Uqv1e5tobkX94p/view?usp=sharing, https://drive.google.com/file/d/1jX2cVSBnmORhZT5lXj956XsVfdzoY3YR/view?usp=sharing, https://drive.google.com/file/d/1lOFGKFYhRFLju6fzthC10s4WatD0_ikm/view?usp=sharing, https://drive.google.com/file/d/1ta9w_VGlbg9sSUQ3z90sjTOo2YamC7Lz/view?usp=sharing
+

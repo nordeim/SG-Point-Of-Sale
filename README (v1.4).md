@@ -49,7 +49,7 @@
 *   [7. Running the Test Suite](#7-running-the-test-suite)
 *   [8. User Guide: Running the Application](#8-user-guide-running-the-application)
 *   [9. Project Roadmap](#9-project-roadmap)
-    *   [Immediate Next Steps (v1.6+)](#immediate-next-steps-v16)
+    *   [Immediate Next Steps (v1.1)](#immediate-next-steps-v11)
     *   [Long-Term Vision (v2.0+)](#long-term-vision-v20)
 *   [10. How to Contribute](#10-how-to-contribute)
 *   [11. License](#11-license)
@@ -60,7 +60,7 @@
 
 **SG-POS** is a free and open-source Point-of-Sale system, engineered from the ground up to address the specific operational and regulatory challenges faced by Small to Medium-sized Businesses (SMBs) in Singapore. It aims to provide the power and polish of expensive enterprise systems in an accessible, modern, and maintainable package.
 
-This project is built with an obsessive focus on quality, both in the user experience and, most importantly, in the engineering. It serves not only as a functional tool but also as a reference implementation for professional-grade Python application architecture, featuring a non-blocking UI, a clean, layered design, and robust data integrity practices. The system is designed to be the central hub for a retail business, managing everything from the customer-facing checkout process to backend inventory control, procurement, and financial reporting.
+This project is built with an obsessive focus on quality, both in the user experience and, most importantly, in the engineering. It serves not only as a functional tool but also as a reference implementation for professional-grade Python application architecture, featuring a non-blocking UI, a clean, layered design, and robust data integrity practices.
 
 ---
 
@@ -142,8 +142,6 @@ graph TD
     style I fill:#d5e8d4
 ```
 
-This flow ensures that the UI (main thread) is never blocked. The `Async Bridge` offloads the heavy work (steps D, E, F, G, J) to a background thread, and the UI is only updated via a safe callback once all the work is complete.
-
 ---
 
 ## **4. Codebase Deep Dive**
@@ -155,59 +153,60 @@ A well-organized file structure is paramount for navigating and maintaining a co
 ```
 sg-pos-system/
 │
-├── .env.example                # Template for environment variables
-├── .gitignore                  # Specifies files/directories to ignore in Git
-├── alembic.ini                 # Configuration for Alembic database migrations
-├── docker-compose.dev.yml      # Defines the PostgreSQL database service for Docker
-├── pyproject.toml              # Project metadata, dependencies, and tool settings (Poetry)
+├── .env.example
+├── .gitignore
+├── alembic.ini
+├── docker-compose.dev.yml
+├── pyproject.toml
 │
-├── app/                        # --- Main Application Source Code ---
+├── app/
 │   ├── __init__.py
-│   ├── main.py                 # Application entry point; initializes core and UI
+│   ├── main.py
 │   │
-│   ├── core/                   # Architectural backbone and cross-cutting concerns
-│   ├── business_logic/         # Business Logic Layer
-│   │   ├── dto/                # Data Transfer Objects (Pydantic models)
-│   │   └── managers/           # Business workflow and rule orchestrators
-│   ├── models/                 # Persistence Layer
-│   ├── services/               # Data Access Layer
-│   └── ui/                     # Presentation Layer
-│       ├── dialogs/            # QDialog classes for specific tasks
-│       ├── resources/          # QSS stylesheets, icons, etc.
-│       ├── views/              # Main QWidget screens (Dashboard, POS, etc.)
-│       └── widgets/            # Reusable custom widgets (KpiWidget, ManagedTableView)
+│   ├── core/
+│   ├── business_logic/
+│   │   ├── dto/
+│   │   └── managers/
+│   ├── models/
+│   ├── services/
+│   └── ui/
+│       ├── dialogs/
+│       ├── resources/
+│       ├── views/
+│       └── widgets/
 │
-├── migrations/                 # Alembic auto-generated migration scripts
-│   ├── versions/
-│   └── env.py
+├── migrations/
 │
-├── scripts/                    # Utility scripts for development
+├── scripts/
 │   └── database/
-│       ├── schema.sql          # A complete, plain SQL snapshot of the target schema
-│       └── seed_data.py        # Script to populate a fresh database with initial data
+│       ├── schema.sql
+│       └── seed_data.py
 │
-└── tests/                      # Automated Test Suite
-    ├── conftest.py             # Pytest fixtures and test environment setup
-    ├── factories.py            # factory-boy definitions for creating test data
-    └── unit/                   # Unit tests, mirroring the `app` directory structure
+└── tests/
+    ├── __init__.py
+    ├── conftest.py
+    ├── factories.py
+    └── unit/
+        ├── business_logic/
+        └── services/
 ```
 
 ### Key File & Directory Descriptions
 
 | Path                             | Description                                                                                              |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `pyproject.toml`                 | **Project Definition.** Manages all dependencies (e.g., `PySide6`, `SQLAlchemy`), project metadata, and development tool configurations (`pytest`, `black`, `ruff`).     |
+| `pyproject.toml`                 | **Project Definition.** Manages all dependencies, project metadata, and development tool configurations.     |
 | `docker-compose.dev.yml`         | **Database Service.** Defines and configures the PostgreSQL database container for local development.        |
-| `alembic.ini` / `migrations/`    | **Database Migrations.** Configuration and scripts for managing database schema evolution using Alembic. This allows for safe, version-controlled updates to the database structure. |
-| `app/main.py`                    | **Application Entry Point.** The script to run. It initializes the `ApplicationCore`, creates the `MainWindow`, and starts the Qt event loop.        |
-| `app/core/`                      | **The Backbone.** Contains the application's most critical, non-domain-specific code. This includes the `ApplicationCore` (the Dependency Injection container), the `async_bridge` for non-blocking UI operations, `config.py` for loading environment settings, and the `Result` pattern for robust error handling. |
-| `app/models/`                    | **Persistence Layer.** Defines all SQLAlchemy ORM models, mirroring the database tables. Each file corresponds to a domain (e.g., `product.py`, `sales.py`), and each class within is a table. This is the single source of truth for the database schema.               |
-| `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic. Services are responsible for translating high-level requests (e.g., "find product by SKU") into SQLAlchemy queries. They abstract all database complexity from the rest of the application.         |
-| `app/business_logic/managers/`   | **Business Logic Layer.** The brain of the application. Managers orchestrate complex workflows (e.g., finalizing a sale involves inventory, payments, and sales records), enforce business rules (e.g., stock levels cannot be negative), and coordinate with multiple services.        |
-| `app/business_logic/dto/`        | **Data Contracts.** Contains all Pydantic models used as Data Transfer Objects. These DTOs define the shape of data passed between the UI and the Business Logic Layer, creating a clean, validated, and decoupled interface.           |
-| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the `DashboardView`, `POSView`, and data management screens (`ProductView`, `CustomerView`). Each view is a self-contained `QWidget`. |
-| `app/ui/widgets/`                | **Reusable Components.** Contains custom widgets designed to be used across multiple views to ensure a consistent look and feel. The `ManagedTableView` (which provides loading/empty states) and `KpiWidget` (for the dashboard) are key examples that significantly enhance the UX. |
-| `tests/`                         | **Automated Tests.** The complete unit test suite. `conftest.py` configures the test environment to use a fast, in-memory SQLite database, ensuring tests are isolated and reliable. `factories.py` provides tools to easily generate test data. |
+| `alembic.ini` / `migrations/`    | **Database Migrations.** Configuration and scripts for managing database schema evolution using Alembic. |
+| `app/main.py`                    | **Application Entry Point.** Initializes the application core, the UI, and starts the event loop.        |
+| `app/core/`                      | **The Backbone.** Contains the `ApplicationCore` (DI container), `async_bridge`, `config`, and `Result` pattern. |
+| `app/models/`                    | **Persistence Layer.** Defines all SQLAlchemy ORM models, mirroring the database tables.               |
+| `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic.         |
+| `app/business_logic/managers/`   | **Business Logic Layer.** Orchestrates workflows, enforces business rules, and makes decisions.        |
+| `app/business_logic/dto/`        | **Data Contracts.** Pydantic models that define the structure of data passed between layers.           |
+| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, Dashboard, and settings panels. |
+| `app/ui/widgets/`                | **Reusable Components.** Contains custom widgets like `ManagedTableView` and `KpiWidget` to ensure a consistent UI. |
+| `tests/`                         | **Automated Tests.** The complete unit test suite. `conftest.py` configures the test environment. |
 
 ---
 
@@ -243,114 +242,101 @@ This guide provides step-by-step instructions to set up a complete local develop
 ### Step-by-Step Setup Guide
 
 1.  **Clone the Repository**
-    Open your terminal or command prompt and clone the project from GitHub.
     ```bash
     git clone https://github.com/your-org/sg-pos-system.git
     cd sg-pos-system
     ```
 
 2.  **Configure Environment Variables**
-    The application uses a `.env.dev` file for local configuration. Copy the provided template. The default values are already configured to connect to the Docker database.
+    Copy the example environment file. The default values are suitable for the local Docker setup.
     ```bash
     cp .env.example .env.dev
     ```
 
 3.  **Start the Database Server**
-    This command reads the `docker-compose.dev.yml` file, downloads the official PostgreSQL image, and starts the database server in a container. It will run in the background and expose the database on `localhost:5432`.
+    This command downloads the PostgreSQL image and starts the database container in the background. It will be available on `localhost:5432`.
     ```bash
     docker compose -f docker-compose.dev.yml up -d
     ```
-    You can check that it's running with `docker ps`.
 
 4.  **Install Project Dependencies**
-    This command reads the `pyproject.toml` file, creates a dedicated virtual environment for the project, and installs all production and development packages (like `pytest` and `black`).
+    This command reads the `pyproject.toml` file, creates a dedicated virtual environment, and installs all production and development packages (like `pytest` and `aiosqlite`).
     ```bash
     poetry install
     ```
 
 5.  **Activate the Virtual Environment**
-    To use the installed packages, you must activate the virtual environment created by Poetry. All subsequent commands must be run inside this environment.
+    All subsequent commands must be run inside this environment to use the installed packages.
     ```bash
     poetry shell
     ```
-    Your command prompt should now be prefixed with the environment name (e.g., `(sg-pos-system-py3.11)`).
 
 6.  **Apply Database Migrations**
-    This is a critical step. The command connects to the running PostgreSQL database and uses Alembic to create all the necessary tables, indexes, and constraints within the `sgpos` schema.
+    This command connects to the running PostgreSQL database and creates all the necessary tables within the `sgpos` schema.
     ```bash
     alembic upgrade head
     ```
 
 7.  **Seed Initial Data (Crucial First-Time Step)**
-    A fresh database is empty. This script populates it with the essential data required to run the application, including the default company, an admin user, and the main outlet.
+    This script populates the fresh database with the default company, admin user, roles, and outlet needed to run the application.
     ```bash
     python scripts/database/seed_data.py
     ```
 
 8.  **Run the Application**
-    You are now ready to launch the POS system. The main window should appear.
+    You are now ready to launch the POS system.
     ```bash
     python app/main.py
     ```
 
 ## 7. Running the Test Suite
-A key feature of this codebase is its comprehensive and reliable test suite. Running the tests is a critical step to ensure that your changes have not introduced any regressions.
+A key feature of this codebase is its comprehensive and reliable test suite.
 
-*   **Run all tests:** To ensure the entire application logic is sound, run the following command from the project root (inside the `poetry shell`):
+- **Run all tests:** To ensure the entire application logic is sound, run the following command from the project root (inside the `poetry shell`):
   ```bash
   pytest
   ```
-  This will discover and run all tests in the `tests/` directory against an isolated, in-memory SQLite database, providing fast and reliable feedback.
-
-*   **Check Test Coverage:** To see which parts of the application are covered by tests, you can generate a report in your terminal or as a more detailed HTML report:
+- **Check Test Coverage:** To see which parts of the application are covered by tests, generate an HTML report:
   ```bash
-  # For a quick summary in the terminal
-  pytest --cov=app
-
-  # For a detailed, browsable HTML report
   pytest --cov=app --cov-report=html
+  # Then open the generated htmlcov/index.html in your browser.
   ```
-  After running the second command, open the generated `htmlcov/index.html` file in your browser to explore coverage line by line.
 
 ## **8. User Guide: Running the Application**
 
 Once the application is running, here is a brief guide on how to use its core features:
 
-*   **Navigation:** Use the menu bar at the top of the window (`Dashboard`, `POS`, `Data Management`, etc.) to switch between the different sections of the application. The application uses lazy-loading, so views are only created the first time you navigate to them, ensuring a fast startup.
-*   **Dashboard:** The Dashboard is the first view you might want to check. Navigate via `Dashboard > Show Dashboard`. It provides a live look at today's sales, transaction counts, and other key metrics. It automatically refreshes with the latest data each time you view it.
+*   **Navigation:** Use the menu bar at the top of the window (`Dashboard`, `POS`, `Data Management`, etc.) to switch between the different sections.
+*   **Dashboard:** The Dashboard view is now available and provides a live look at today's sales, transaction counts, and other key metrics. It automatically refreshes each time you view it.
 *   **Making a Sale:**
-    1.  Navigate to `POS > Sales Screen`. This is the default view on startup.
-    2.  Use the product search bar to find an item by its SKU or name and click **"Add to Cart"**. The item will appear in the cart on the left.
-    3.  Once all items are added, click the green **"PAY"** button.
-    4.  In the `Process Payment` dialog, select a payment method, enter the amount tendered, and click **"Add Payment"**. You can add multiple payments for split-tender transactions.
-    5.  Once the balance is zero or less, click **"Finalize Sale"**. A success message will appear, and the cart will be cleared for the next transaction.
+    1.  Navigate to `POS > Sales Screen`.
+    2.  Find an item by its SKU or name and click **"Add to Cart"**.
+    3.  Click the green **"PAY"** button, enter payment details, and click **"Finalize Sale"**.
 *   **Managing Data (Products, Customers, etc.):**
     1.  Navigate to a management screen like `Data Management > Products`.
-    2.  The view will show a "Loading..." message and then display the data. If no data exists, it will show an informative "No products found" message. This stateful feedback is consistent across all data views.
-    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records. Double-clicking a row is a shortcut for editing.
+    2.  The view will show a "Loading..." message and then display the data. If no data exists, it will show an informative "No products found" message.
+    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records.
 *   **Settings:**
     1.  Navigate to `Settings > Application Settings`.
-    2.  Here you can manage Company Information, add or edit Users and their roles, and manage Payment Methods.
+    2.  Here you can manage Company Information, Users, and the newly implemented Payment Methods.
 
 ## **9. Project Roadmap**
 
 With the core features and UI/UX baseline established, the project is well-positioned for future growth.
 
-### Immediate Next Steps (v1.6+)
+### Immediate Next Steps (v1.1)
 
-*   **Expand Test Coverage:** Continue to build out the test suite, focusing on the data access (service) layer and adding basic UI tests with `pytest-qt` to validate signal/slot connections and dialog behavior.
-*   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing). This would involve new models and a dedicated `PromotionManager`.
-*   **Global Status Bar:** Add a `QStatusBar` to the `MainWindow` to provide non-intrusive feedback for operations like saving data or connection status, improving the user's awareness of background activities.
-*   **Refine Dashboard:** Add more KPIs and simple charts (e.g., a bar chart for weekly sales) to the dashboard. This would involve enhancing the `ReportService` with more aggregation queries.
-*   **Improve Search UX:** Implement the debouncing `QTimer` pattern (currently in `ProductView`) across all other searchable views (`CustomerView`, `InventoryView`) to improve performance and reduce database load.
+*   **Expand Test Coverage:** Continue to build out the test suite, focusing on the data access (service) layer and adding basic UI tests with `pytest-qt`.
+*   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing).
+*   **Global Status Bar:** Add a status bar to the `MainWindow` to provide non-intrusive feedback for operations like saving data or connection status.
+*   **Refine Dashboard:** Add more KPIs and simple charts (e.g., a bar chart for weekly sales) to the dashboard.
 
 ### Long-Term Vision (v2.0+)
 
-*   **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking. This would require significant additions to the `InventoryManager` and new UI views.
-*   **Full Accounting Module:** Expand the accounting models to support a full double-entry ledger, accounts payable/receivable, and automated journal entries from sales and purchases. This would transform the application into a lightweight ERP system.
-*   **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels in real-time. This would likely involve creating a new `integrations` sub-package.
-*   **Cloud Backend:** Architect a cloud-based version of the backend logic, exposing it via a REST or GraphQL API. This would enable the creation of a mobile companion app (for stock-takes or mobile sales) and a web-based reporting dashboard for business owners to access from anywhere.
-*   **Enhanced Hardware Support:** Add direct support for receipt printers, cash drawers, and barcode scanners using libraries that interface with serial or USB ports.
+*   **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking.
+*   **Full Accounting Module:** Expand the accounting models to support a full double-entry ledger, accounts payable/receivable, and automated journal entries from sales and purchases.
+*   **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels.
+*   **Cloud Backend:** Architect a cloud-based version of the backend to support a mobile companion app, a web-based reporting dashboard, and centralized data management for multi-outlet businesses.
 
 ---
 
@@ -362,4 +348,4 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 
 ## **11. License**
 
-This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty. See the `LICENSE` file for full details.
+This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.

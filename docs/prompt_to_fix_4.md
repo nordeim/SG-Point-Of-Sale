@@ -33,3 +33,56 @@ awesome job! now help me to carefully review and validate the "pytest" output at
 ---
 awesome job! now help me to very, very carefully review and validate the application start up log below systematically using line by line comparison. then give me a detail analysis report on whether the application still remain healthy after the "models" files update.
 
+---
+awesome understanding! now please help me to thoroughly and systematically review the current project codebase using line by line comparison and validation. then create a 6000 words `Code_Review_and_Assessment_Report.md` in markdown format, this document should describe in detail your quality assessment of the current codebase based on your careful and thorough review and analysis of the current codebase, especially paying close attention to files affected by the recent changes.
+
+The current codebase consists of *original* files enclosed in `project_codebase_files_set.md` (v1.2) superseded by some files added or modified in `new_codebase_files_set.md` (v1.5)
+
+1. Refer to  `currect_project_file_structure.txt` for a complete list of all codebase files. If a file is not in this list, the file does not exist yet.
+
+2. Refer to `newly_added_code_files_list.txt` for a list of the newly added files.
+
+3. Refer to `Code Change Review (v1.5).md` for the recent changes made to the codebase - you are to do a very careful and thorough line by line validation for files affected by this change document 
+
+---
+awesome job with your code review and analysis! now help me create for me a detailed architecture overview document in markdown and named `Project Architecture Document.md`. Make sure you do a careful review and validation of the application codebase shared. Use line by line review to get a good grounding of the purpose of the application and its codebase. Use at least 6000 words for the document that accurately describes the codebase in detail, use a clear diagram to show the codebase relationship. Include a section to describe the file structure and the purpose of each folder and key files, start with a diagram.
+
+---
+awesome job with the architecture document! now please help me create a complete updated *replacement* for `README.md`  that describe and represent the current codebase more accurately, also add the following sections at appropriate point / sequence:
+
+1. add / update a section to show / describe the project codebase file hierarchy
+2. add / update a section for a flowchart diagram to describe the interactions between various files and modules
+3. add / update a section to list and describe the files in the codebase file hierarchy 
+4. Current features implemented (partially or fully), Roadmap for suggested improvements divided into two sections, one for the immediate and one for the long-term goals.
+5. Clear and detailed deployment guide starting from the GitHub repository, specify how to install, setup and configure the POS machine to run the code and how to do the same for the database server (docker)
+6. add / update a section for user guide on how to use and run the program (application). 
+
+The shared `README.md` is just a draft copy with some incomplete with missing sections. Please create a *complete* updated *replacement* version with at least 4000 words, by filling in relevant details from older versions. Also include additional details to describe recent code changes in the codebase.
+
+*IMPORTANT*, the updated replacment `README.md` must be complete in itself, without containing any references to older versions or other documents.
+
+---
+awesome job again! Below is the methodology to review and validate first, then create a correct updated version of the initial Alembic migration file, `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`, which was auto-generated and now needs to be fixed to match the current ORM models.
+
+### 1. Deeply Understand the Goal
+
+I want a file that, when `alembic upgrade head` is run on an empty database, creates a schema that perfectly matches the one defined by the SQLAlchemy models in `app/models/`.
+
+### 2. Systematic Diagnosis & Analysis of Discrepancies
+
+You will compare three sources of truth:
+1.  **The Flawed Migration (`migrations/versions/d5a6759ef2f7_initial_schema_setup.py`):** This is the file to be replaced.
+2.  **The ORM Models (`app/models/*.py`):** This is the *desired state*. This is the ultimate source of truth for the application logic.
+3.  **The SQL Schema (`scripts/database/schema.sql`):** This is a helpful, human-readable reference for the desired state, which seems more up-to-date than the flawed migration.
+
+---
+awesome job! based on your comprehensive review of the current codebase, please give me a detailed assessment report in markdown format, that includes recommendations for code improvements or for fixing bugs or issues identified.
+
+---
+Awesome job so far! Arrange the recommended improvements and fixes identified into logical phases of tasks, arrange the phases into logical order, then for each phase, think deeply and systematically to explore carefully and thoroughly to plan in detail for the task actions to be completed and files to be created, create a corresponding checklist for each sub-task to be execute and for each file to be created or updated. Come up with a comprehensive plan arranged in logical phases to cover all actions and sub-actions to be carried out, each sub-task with its checklist, before proceeding with the execution one phase at a time. Wait for me to confirm the successful completion of each phase before proceeding to the next phase in the overall comprehensive and detailed execution plan.
+
+*IMPORTANT* to carefully and thoroughly through systematic line by line validation of the below mentioned issues against the current codebase (including the latest updated code files) first before finalizing the list of issues to resolve, only then start your execution planning.
+
+---
+awesome plan! awesome job! please proceed with the next step in your plan meticulously and systematically.
+
