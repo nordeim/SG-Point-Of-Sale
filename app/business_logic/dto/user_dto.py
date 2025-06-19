@@ -2,7 +2,7 @@
 """Data Transfer Objects for User operations."""
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 class UserBaseDTO(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
@@ -21,11 +21,9 @@ class UserUpdateDTO(UserBaseDTO):
 class RoleDTO(BaseModel):
     id: uuid.UUID
     name: str
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserDTO(UserBaseDTO):
     id: uuid.UUID
     roles: List[RoleDTO]
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

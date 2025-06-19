@@ -57,6 +57,9 @@ qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g.,
 # NEW: Add psycopg2-binary for Alembic's synchronous connection to PostgreSQL
 psycopg2-binary = "^2.9.10" # Or latest stable version
 
+# FIX: Add aiosqlite, the async driver needed for the in-memory SQLite test database.
+aiosqlite = "^0.20.0"
+
 # Testing Framework
 pytest = "^8.2.0"             # The primary testing framework.
 pytest-qt = "^4.2.0"          # For testing PySide6 UI components.

@@ -3,7 +3,7 @@
 import uuid
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 class CustomerBaseDTO(BaseModel):
     """Base DTO with common customer fields."""
@@ -29,8 +29,7 @@ class CustomerDTO(CustomerBaseDTO):
     credit_limit: Decimal = Field(..., ge=0, decimal_places=2, description="Credit limit extended to the customer")
     is_active: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LoyaltyPointAdjustmentDTO(BaseModel):
     """DTO for manually adjusting a customer's loyalty points."""

@@ -2,7 +2,7 @@
 """Data Transfer Objects for Company and Outlet operations."""
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class CompanyBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Legal name of the company")
@@ -19,9 +19,8 @@ class CompanyUpdateDTO(CompanyBaseDTO):
 class CompanyDTO(CompanyBaseDTO):
     """DTO representing a full company record."""
     id: uuid.UUID
-
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class OutletDTO(BaseModel):
     """DTO representing a retail outlet."""
@@ -29,6 +28,5 @@ class OutletDTO(BaseModel):
     name: str
     code: str
     is_active: bool
-
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)

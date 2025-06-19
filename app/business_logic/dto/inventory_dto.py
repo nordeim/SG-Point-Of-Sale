@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # --- Supplier DTOs ---
 class SupplierBaseDTO(BaseModel):
@@ -23,8 +23,7 @@ class SupplierUpdateDTO(SupplierBaseDTO):
 
 class SupplierDTO(SupplierBaseDTO):
     id: uuid.UUID
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Purchase Order DTOs ---
 class PurchaseOrderItemCreateDTO(BaseModel):
@@ -41,7 +40,7 @@ class PurchaseOrderCreateDTO(BaseModel):
     order_date: datetime = Field(default_factory=datetime.utcnow)
     expected_delivery_date: Optional[datetime] = None
     notes: Optional[str] = None
-    items: List[PurchaseOrderItemCreateDTO] = Field(..., min_items=1)
+    items: List[PurchaseOrderItemCreateDTO] = Field(..., min_length=1)
 
 class PurchaseOrderItemDTO(BaseModel):
     id: uuid.UUID
@@ -53,8 +52,7 @@ class PurchaseOrderItemDTO(BaseModel):
     quantity_received: Decimal = Field(..., decimal_places=4)
     unit_cost: Decimal = Field(..., decimal_places=4)
     line_total: Decimal = Field(..., decimal_places=2)
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PurchaseOrderDTO(BaseModel):
     id: uuid.UUID
@@ -69,8 +67,7 @@ class PurchaseOrderDTO(BaseModel):
     notes: Optional[str]
     total_amount: Decimal = Field(..., decimal_places=2)
     items: List[PurchaseOrderItemDTO]
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Stock Adjustment DTO ---
 class StockAdjustmentItemDTO(BaseModel):
@@ -83,7 +80,7 @@ class StockAdjustmentDTO(BaseModel):
     outlet_id: uuid.UUID
     user_id: uuid.UUID
     notes: str = Field(..., min_length=1, description="Reason or notes for the adjustment")
-    items: List[StockAdjustmentItemDTO] = Field(..., min_items=1)
+    items: List[StockAdjustmentItemDTO] = Field(..., min_length=1)
 
 # --- Stock Movement DTO (for display/reporting) ---
 class StockMovementDTO(BaseModel):
@@ -99,8 +96,7 @@ class StockMovementDTO(BaseModel):
     notes: Optional[str]
     created_by_user_name: Optional[str]
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Inventory Summary DTO (for InventoryView display) ---
 class InventorySummaryDTO(BaseModel):
@@ -116,5 +112,4 @@ class InventorySummaryDTO(BaseModel):
     cost_price: Decimal = Field(..., decimal_places=4)
     selling_price: Decimal = Field(..., decimal_places=4)
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

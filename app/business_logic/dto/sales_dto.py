@@ -3,7 +3,7 @@
 import uuid
 from decimal import Decimal
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 class CartItemDTO(BaseModel):
@@ -25,8 +25,8 @@ class SaleCreateDTO(BaseModel):
     outlet_id: uuid.UUID
     cashier_id: uuid.UUID
     customer_id: Optional[uuid.UUID] = None
-    cart_items: List[CartItemDTO] = Field(..., min_items=1)
-    payments: List[PaymentInfoDTO] = Field(..., min_items=1)
+    cart_items: List[CartItemDTO] = Field(..., min_length=1)
+    payments: List[PaymentInfoDTO] = Field(..., min_length=1)
     notes: Optional[str] = None
 
 class SalesTransactionItemDTO(BaseModel):
@@ -40,8 +40,7 @@ class SalesTransactionItemDTO(BaseModel):
     line_total: Decimal = Field(..., decimal_places=2)
     gst_rate: Decimal = Field(..., decimal_places=2)
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class FinalizedSaleDTO(BaseModel):
     """DTO representing a completed sale, suitable for generating a receipt."""
