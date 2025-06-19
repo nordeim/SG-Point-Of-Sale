@@ -21,6 +21,7 @@ from app.core.async_bridge import AsyncWorker
 
 # Import all view classes that will be lazy-loaded
 from app.ui.views.pos_view import POSView
+from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.product_view import ProductView
 from app.ui.views.customer_view import CustomerView
 from app.ui.views.inventory_view import InventoryView
@@ -42,6 +43,7 @@ class MainWindow(QMainWindow):
         # --- Lazy Loading Implementation ---
         # 1. A dictionary to hold view definitions and cache instances
         self.views: Dict[str, Dict[str, Optional[Type[QWidget]]]] = {
+            "dashboard": {"class": DashboardView, "instance": None},
             "product":   {"class": ProductView,   "instance": None},
             "customer":  {"class": CustomerView,  "instance": None},
             "inventory": {"class": InventoryView, "instance": None},
@@ -63,6 +65,9 @@ class MainWindow(QMainWindow):
         
         file_menu = menu_bar.addMenu("&File")
         file_menu.addAction("E&xit", self.close)
+
+        dashboard_menu = menu_bar.addMenu("&Dashboard")
+        dashboard_menu.addAction("Show Dashboard", lambda: self._show_view("dashboard"))
 
         pos_menu = menu_bar.addMenu("&POS")
         pos_menu.addAction("Sales Screen", lambda: self.stacked_widget.setCurrentWidget(self.pos_view))

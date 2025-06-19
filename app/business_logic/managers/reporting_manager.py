@@ -10,7 +10,7 @@ import uuid
 from app.core.result import Result, Success, Failure
 from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.reporting_dto import (
-    SalesSummaryReportDTO, SalesByPeriodDTO, ProductPerformanceDTO,
+    DashboardStatsDTO, SalesSummaryReportDTO, SalesByPeriodDTO, ProductPerformanceDTO,
     InventoryValuationReportDTO, InventoryValuationItemDTO, GstReportDTO
 )
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -29,6 +29,14 @@ class ReportingManager(BaseManager):
     def report_service(self) -> "ReportService": return self.core.report_service
     @property
     def outlet_service(self) -> "OutletService": return self.core.outlet_service
+
+    async def generate_dashboard_stats(self, company_id: uuid.UUID) -> Result[DashboardStatsDTO, str]:
+        """Generates the aggregated statistics for the main dashboard."""
+        raw_data_result = await self.report_service.get_dashboard_stats_raw_data(company_id)
+        if isinstance(raw_data_result, Failure):
+            return raw_data_result
+        
+        return Success(DashboardStatsDTO(**raw_data_result.value))
 
     async def generate_sales_summary_report(self, company_id: uuid.UUID, start_date: date, end_date: date) -> Result[SalesSummaryReportDTO, str]:
         """Generates a comprehensive sales summary report."""
@@ -196,7 +204,6 @@ class ReportingManager(BaseManager):
             writer = csv.writer(f)
             headers = ["SKU", "Product Name", "Qty Sold", "Revenue (S$)", "Margin (S$)", "Margin (%)"]
             writer.writerow(headers)
-            # FIX: Iterate over the correct attribute of the parent DTO
             for p in data.top_performing_products:
                 writer.writerow([p.sku, p.name, f"{p.quantity_sold:.4f}", f"{p.total_revenue:.2f}", f"{p.gross_margin:.2f}", f"{p.gross_margin_percentage:.2f}"])
 
@@ -209,6 +216,5 @@ class ReportingManager(BaseManager):
             writer.writerow([])
             headers = ["SKU", "Product Name", "Qty On Hand", "Cost Price (S$)", "Total Value (S$)"]
             writer.writerow(headers)
-            # FIX: Iterate over the correct attribute of the parent DTO
             for i in data.items:
                 writer.writerow([i.sku, i.name, f"{i.quantity_on_hand:.4f}", f"{i.cost_price:.4f}", f"{i.total_value:.2f}"])

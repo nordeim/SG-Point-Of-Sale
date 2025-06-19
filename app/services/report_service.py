@@ -8,14 +8,14 @@ It primarily uses SQLAlchemy Core for performance-critical aggregation.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Any, Optional
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import uuid
 import sqlalchemy as sa
 from sqlalchemy.sql import func, cast
 
 from app.core.result import Result, Success, Failure
-from app.models import SalesTransaction, SalesTransactionItem, Product, Inventory, PurchaseOrder, PurchaseOrderItem
+from app.models import SalesTransaction, SalesTransactionItem, Product, Inventory, PurchaseOrder, PurchaseOrderItem, Customer
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -25,6 +25,61 @@ class ReportService:
 
     def __init__(self, core: "ApplicationCore"):
         self.core = core
+
+    async def get_dashboard_stats_raw_data(self, company_id: uuid.UUID) -> Result[Dict[str, Any], str]:
+        """Fetches raw data points required for the main dashboard KPIs."""
+        try:
+            async with self.core.get_session() as session:
+                today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                today_end = today_start + timedelta(days=1)
+                
+                month_start = today_start.replace(day=1)
+
+                # 1. Today's Sales
+                sales_stmt = (
+                    sa.select(
+                        func.coalesce(func.sum(SalesTransaction.total_amount), Decimal('0.0')).label("sales"),
+                        func.coalesce(func.count(SalesTransaction.id), 0).label("transactions")
+                    ).where(
+                        SalesTransaction.company_id == company_id,
+                        SalesTransaction.transaction_date >= today_start,
+                        SalesTransaction.transaction_date < today_end,
+                        SalesTransaction.status == 'COMPLETED'
+                    )
+                )
+                sales_res = (await session.execute(sales_stmt)).one()
+
+                # 2. New Customers This Month
+                customer_stmt = (
+                    sa.select(func.coalesce(func.count(Customer.id), 0))
+                    .where(
+                        Customer.company_id == company_id,
+                        Customer.created_at >= month_start
+                    )
+                )
+                customer_res = (await session.execute(customer_stmt)).scalar()
+
+                # 3. Low Stock Items
+                low_stock_stmt = (
+                    sa.select(func.coalesce(func.count(Product.id), 0))
+                    .join(Inventory, Product.id == Inventory.product_id)
+                    .where(
+                        Product.company_id == company_id,
+                        Product.track_inventory == True,
+                        Inventory.quantity_on_hand <= Product.reorder_point
+                    )
+                )
+                low_stock_res = (await session.execute(low_stock_stmt)).scalar()
+
+                return Success({
+                    "total_sales_today": sales_res.sales,
+                    "transaction_count_today": sales_res.transactions,
+                    "new_customers_this_month": customer_res,
+                    "low_stock_item_count": low_stock_res
+                })
+
+        except Exception as e:
+            return Failure(f"Database error fetching dashboard stats: {e}")
 
     async def get_sales_summary_raw_data(self, company_id: uuid.UUID, start_date: date, end_date: date) -> Result[List[Dict[str, Any]], str]:
         """Fetches aggregated sales data grouped by day."""

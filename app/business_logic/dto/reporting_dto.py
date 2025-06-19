@@ -11,6 +11,15 @@ from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+# --- Dashboard DTO ---
+
+class DashboardStatsDTO(BaseModel):
+    """DTO for the main dashboard's Key Performance Indicators (KPIs)."""
+    total_sales_today: Decimal = Field(..., decimal_places=2)
+    transaction_count_today: int
+    new_customers_this_month: int
+    low_stock_item_count: int
+
 # --- Sales Report DTOs ---
 
 class SalesByPeriodDTO(BaseModel):
