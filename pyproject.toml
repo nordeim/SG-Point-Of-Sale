@@ -1,4 +1,4 @@
-# pyproject.toml
+# File: pyproject.toml
 [tool.poetry]
 # --- Project Metadata ---
 # This information is used for packaging the application and for display on
@@ -30,10 +30,11 @@ PySide6 = "^6.9.0"         # The core Qt6 bindings for Python.
 SQLAlchemy = {version = "^2.0.30", extras = ["asyncio"]} # The industry-standard ORM, with asyncio support.
 alembic = "^1.13.1"        # For database schema migrations.
 asyncpg = "^0.29.0"        # High-performance asyncio driver for PostgreSQL.
+greenlet = "^3.0.3"        # Required for SQLAlchemy's async bridge.
 
 # Data Validation & Settings
 pydantic = "^2.7.1"        # For Data Transfer Objects (DTOs) and core validation.
-pydantic-settings = "^2.2.1" # FIX: Added for settings management with Pydantic v2.
+pydantic-settings = "^2.2.1" # Added for settings management with Pydantic v2.
 python-dotenv = "^1.0.0"   # For loading environment variables from .env files.
 
 # Security
@@ -54,11 +55,8 @@ qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g.,
 # These packages are only installed in development environments (`poetry install --with dev`).
 # This keeps the production installation lean and clean.
 [tool.poetry.group.dev.dependencies]
-# NEW: Add psycopg2-binary for Alembic's synchronous connection to PostgreSQL
-psycopg2-binary = "^2.9.10" # Or latest stable version
-
-# FIX: Add aiosqlite, the async driver needed for the in-memory SQLite test database.
-aiosqlite = "^0.20.0"
+psycopg2-binary = "^2.9.10" # Synchronous driver for Alembic
+aiosqlite = "^0.20.0"      # Async driver for SQLite test database
 
 # Testing Framework
 pytest = "^8.2.0"             # The primary testing framework.

@@ -3,6 +3,7 @@
 Defines the base for all SQLAlchemy ORM models.
 Includes a mixin for common timestamp columns.
 """
+import os
 from datetime import datetime
 from sqlalchemy import MetaData, Column, DateTime
 from sqlalchemy.orm import declarative_base
@@ -18,9 +19,16 @@ convention = {
     "pk": "pk_%(table_name)s"
 }
 
+# FIX: Conditionally set the schema based on a test environment variable.
+# This allows the same models to work with PostgreSQL (with schema) and
+# SQLite (without schema) during tests.
+schema = "sgpos"
+if os.environ.get("SGPOS_TEST_MODE") == "1":
+    schema = None
+
 # IMPORTANT: Specify the schema here. All tables defined using this Base will
-# automatically belong to the 'sgpos' schema.
-metadata = MetaData(naming_convention=convention, schema="sgpos")
+# automatically belong to the 'sgpos' schema in production.
+metadata = MetaData(naming_convention=convention, schema=schema)
 Base = declarative_base(metadata=metadata)
 
 class TimestampMixin:

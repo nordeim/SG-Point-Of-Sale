@@ -5,7 +5,7 @@ Data Transfer Objects (DTOs) for the Product entity.
 import uuid
 from decimal import Decimal
 from typing import Optional, Any
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationInfo
 
 class ProductBaseDTO(BaseModel):
     """Base DTO with common product fields."""
@@ -24,8 +24,8 @@ class ProductBaseDTO(BaseModel):
 
     @field_validator('selling_price')
     @classmethod
-    def check_selling_price_not_less_than_cost_price(cls, v: Decimal, values: Any) -> Decimal:
-        if 'cost_price' in values.data and v < values.data['cost_price']:
+    def check_selling_price_not_less_than_cost_price(cls, v: Decimal, info: ValidationInfo) -> Decimal:
+        if info.data and 'cost_price' in info.data and v < info.data['cost_price']:
             raise ValueError('Selling price cannot be less than cost price.')
         return v
 

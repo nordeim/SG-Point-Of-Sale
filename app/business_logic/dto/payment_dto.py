@@ -3,7 +3,7 @@
 import uuid
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class PaymentMethodType(str, Enum):
     """Enumeration for the types of payment methods available."""
@@ -30,7 +30,6 @@ class PaymentMethodUpdateDTO(PaymentMethodBaseDTO):
 
 class PaymentMethodDTO(PaymentMethodBaseDTO):
     """DTO representing a full payment method record for data retrieval."""
-    id: uuid.UUID = Field(..., description="Unique identifier for the payment method")
+    id: uuid.UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
