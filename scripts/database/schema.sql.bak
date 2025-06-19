@@ -1,7 +1,7 @@
 -- File: scripts/database/schema.sql
 -- =============================================================================
 -- SG Point-of-Sale (SG-POS) System - Complete Database Schema
--- Version: 2.2 (Corrected to match ORM Models)
+-- Version: 2.1 (Super-Set Edition with constraint fix)
 -- Database: PostgreSQL 15+
 -- =============================================================================
 
@@ -27,8 +27,7 @@ CREATE TABLE companies (
     address TEXT,
     phone VARCHAR(20),
     email VARCHAR(255),
-    -- FIX: Changed CHAR(3) to VARCHAR(3) to perfectly match SQLAlchemy's String(3) mapping.
-    base_currency VARCHAR(3) NOT NULL DEFAULT 'SGD',
+    base_currency VARCHAR(3) NOT NULL DEFAULT 'SGD', -- Corrected from CHAR(3)
     fiscal_year_start DATE,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -199,8 +198,6 @@ CREATE TABLE stock_movements (
     movement_type VARCHAR(50) NOT NULL CHECK (movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')),
     quantity_change NUMERIC(15, 4) NOT NULL,
     reference_id UUID,
-    -- FIX: Added missing reference_type column to match the ORM model.
-    reference_type VARCHAR(50),
     notes TEXT,
     created_by_user_id UUID REFERENCES sgpos.users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -208,9 +205,8 @@ CREATE TABLE stock_movements (
 COMMENT ON TABLE sgpos.stock_movements IS 'Immutable log of all inventory changes for full auditability.';
 COMMENT ON COLUMN sgpos.stock_movements.quantity_change IS 'Positive for stock in, negative for stock out';
 COMMENT ON COLUMN sgpos.stock_movements.reference_id IS 'e.g., sales_transaction_id, purchase_order_id';
-COMMENT ON COLUMN sgpos.stock_movements.reference_type IS 'e.g., ''SALE'', ''PURCHASE_ORDER''';
 
-
+-- Added Purchase Orders and Purchase Order Items to this section as they are part of inventory management
 CREATE TABLE purchase_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES sgpos.companies(id),
@@ -232,13 +228,13 @@ CREATE TABLE purchase_order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     purchase_order_id UUID NOT NULL REFERENCES sgpos.purchase_orders(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES sgpos.products(id),
-    variant_id UUID REFERENCES sgpos.product_variants(id),
+    variant_id UUID REFERENCES sgpos.product_variants(id), -- Added variant_id for PO items if variants are ordered
     quantity_ordered NUMERIC(15, 4) NOT NULL,
     quantity_received NUMERIC(15, 4) NOT NULL DEFAULT 0,
     unit_cost NUMERIC(19, 4) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(purchase_order_id, product_id, variant_id)
+    UNIQUE(purchase_order_id, product_id, variant_id) -- Unique constraint includes variant_id
 );
 COMMENT ON TABLE sgpos.purchase_order_items IS 'A line item within a purchase order.';
 
@@ -289,12 +285,12 @@ CREATE TABLE sales_transaction_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sales_transaction_id UUID NOT NULL REFERENCES sgpos.sales_transactions(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES sgpos.products(id),
-    variant_id UUID REFERENCES sgpos.product_variants(id),
+    variant_id UUID REFERENCES sgpos.product_variants(id), -- Added variant_id for sales items
     quantity NUMERIC(15, 4) NOT NULL,
     unit_price NUMERIC(19, 4) NOT NULL,
     cost_price NUMERIC(19, 4) NOT NULL,
     line_total NUMERIC(19, 2) NOT NULL,
-    UNIQUE(sales_transaction_id, product_id, variant_id)
+    UNIQUE(sales_transaction_id, product_id, variant_id) -- Unique constraint includes variant_id
 );
 COMMENT ON TABLE sgpos.sales_transaction_items IS 'Individual line items for a sales transaction.';
 COMMENT ON COLUMN sgpos.sales_transaction_items.unit_price IS 'Price at time of sale';
@@ -306,7 +302,7 @@ CREATE TABLE payment_methods (
     name VARCHAR(100) NOT NULL,
     type VARCHAR(50) NOT NULL CHECK (type IN ('CASH', 'CARD', 'NETS', 'PAYNOW', 'VOUCHER', 'STORE_CREDIT')),
     is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added created_at/updated_at to match other tables for consistency
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(company_id, name)
 );
@@ -317,8 +313,8 @@ CREATE TABLE payments (
     payment_method_id UUID NOT NULL REFERENCES sgpos.payment_methods(id),
     amount NUMERIC(19, 2) NOT NULL,
     reference_number VARCHAR(100),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    -- FIX: Removed updated_at column to match the ORM model, as payments are immutable.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() -- Added updated_at for consistency
 );
 COMMENT ON TABLE sgpos.payments IS 'Records individual payments, supporting split tender.';
 COMMENT ON COLUMN sgpos.payments.reference_number IS 'For card transactions, e-wallets, etc.';
@@ -337,8 +333,8 @@ CREATE TABLE chart_of_accounts (
     account_type VARCHAR(50) NOT NULL CHECK (account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')),
     parent_id UUID REFERENCES sgpos.chart_of_accounts(id),
     is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
     UNIQUE(company_id, account_code)
 );
 
@@ -348,12 +344,12 @@ CREATE TABLE journal_entries (
     entry_number VARCHAR(50) NOT NULL,
     entry_date DATE NOT NULL,
     description TEXT,
-    reference_type VARCHAR(50),
+    reference_type VARCHAR(50), -- e.g., 'SALE', 'PURCHASE'
     reference_id UUID,
     status VARCHAR(20) NOT NULL DEFAULT 'POSTED' CHECK (status IN ('DRAFT', 'POSTED', 'VOID')),
     created_by_user_id UUID NOT NULL REFERENCES sgpos.users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
     UNIQUE(company_id, entry_number)
 );
 
@@ -365,7 +361,8 @@ CREATE TABLE journal_entry_lines (
     credit_amount NUMERIC(19, 2) NOT NULL DEFAULT 0,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
+    -- A line must be either a debit or a credit, but not both. (Disallows 0,0)
     CONSTRAINT debit_or_credit_check CHECK ( (debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) )
 );
 COMMENT ON TABLE sgpos.journal_entry_lines IS 'Individual lines of a double-entry bookkeeping record.';
@@ -380,7 +377,7 @@ CREATE TABLE audit_logs (
     id BIGSERIAL PRIMARY KEY,
     company_id UUID,
     user_id UUID REFERENCES sgpos.users(id) ON DELETE SET NULL,
-    action VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL, -- e.g., 'CREATE_PRODUCT', 'UPDATE_PRICE'
     table_name VARCHAR(100) NOT NULL,
     record_id UUID NOT NULL,
     old_values JSONB,
@@ -419,8 +416,6 @@ CREATE INDEX idx_stock_movements_company_id ON sgpos.stock_movements(company_id)
 CREATE INDEX idx_stock_movements_outlet_id ON sgpos.stock_movements(outlet_id);
 CREATE INDEX idx_stock_movements_product_id ON sgpos.stock_movements(product_id);
 CREATE INDEX idx_stock_movements_created_by_user_id ON sgpos.stock_movements(created_by_user_id);
--- FIX: Added missing index for consistency and performance.
-CREATE INDEX idx_stock_movements_reference_id ON sgpos.stock_movements(reference_id);
 CREATE INDEX idx_purchase_orders_company_id ON sgpos.purchase_orders(company_id);
 CREATE INDEX idx_purchase_orders_outlet_id ON sgpos.purchase_orders(outlet_id);
 CREATE INDEX idx_purchase_orders_supplier_id ON sgpos.purchase_orders(supplier_id);
@@ -429,6 +424,7 @@ CREATE INDEX idx_purchase_order_items_product_id ON sgpos.purchase_order_items(p
 CREATE INDEX idx_customers_company_id ON sgpos.customers(company_id);
 CREATE INDEX idx_sales_transactions_company_id ON sgpos.sales_transactions(company_id);
 CREATE INDEX idx_sales_transactions_outlet_id ON sgpos.sales_transactions(outlet_id);
+    -- Changed from sales_transactions_date to sales_transactions_transaction_date to be more specific
 CREATE INDEX idx_sales_transactions_transaction_date ON sgpos.sales_transactions(transaction_date DESC);
 CREATE INDEX idx_sales_transactions_customer_id ON sgpos.sales_transactions(customer_id);
 CREATE INDEX idx_sales_transactions_cashier_id ON sgpos.sales_transactions(cashier_id);

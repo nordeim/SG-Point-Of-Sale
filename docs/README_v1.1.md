@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Screenshot" width="700"/>
+  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Logo" width="600"/>
 </p>
 
 <h1 align="center">SG Point-of-Sale (SG-POS) System</h1>
@@ -48,7 +48,7 @@
     *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
 *   [7. User Guide: Running the Application](#7-user-guide-running-the-application)
 *   [8. Project Roadmap](#8-project-roadmap)
-    *   [Immediate Next Steps (v1.1)](#immediate-next-steps-v11)
+    *   [Next Steps (v1.1)](#next-steps-v11)
     *   [Long-Term Vision (v2.0+)](#long-term-vision-v20)
 *   [9. How to Contribute](#9-how-to-contribute)
 *   [10. License](#10-license)
@@ -89,55 +89,50 @@ SG-POS is built on a set of robust architectural principles designed for maintai
 
 Our architecture strictly separates the application into four logical layers, ensuring that each part of the codebase has a single, well-defined responsibility:
 
-1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic. When a user acts, the UI packages the input into a DTO and hands it to the Business Logic Layer via the application's core.
-
-2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. **Managers** (e.g., `SalesManager`) orchestrate workflows, enforce business rules, and make decisions. They use **DTOs** (Data Transfer Objects) as clean data contracts for communication with the UI.
-
-3.  **Data Access Layer (`app/services`):** Implements the **Repository Pattern**. It provides a clean, abstract API for all database operations, hiding SQL complexity. Each service (e.g., `ProductService`) is responsible for querying a specific database entity.
-
-4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to the PostgreSQL tables. This is the only layer aware of the database's table and column structure.
+1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic.
+2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. **Managers** orchestrate workflows and enforce business rules, using **DTOs** (Data Transfer Objects) as data contracts.
+3.  **Data Access Layer (`app/services`):** Implements the Repository Pattern. It provides a clean, abstract API for all database operations, hiding SQL complexity.
+4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to the PostgreSQL tables.
 
 ### Module Interaction Flowchart
 
-The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them. The following diagram illustrates the flow for the most complex operation: finalizing a sale.
+The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them.
 
 ```mermaid
 graph TD
     subgraph "Main Thread (GUI)"
         direction LR
-        A[User clicks 'Finalize Sale' in PaymentDialog] --> B[Presentation Layer<br>POSView & PaymentDialog];
-        B --> C{Async Bridge<br>app/core/async_bridge.py};
-        H[UI Callback _on_done] --> I[Update UI<br>Show receipt/success message];
+        A[User Action on UI<br>(e.g., Clicks 'Save' in CustomerDialog)] --> B[Presentation Layer<br>app/ui/dialogs/customer_dialog.py];
+        B --> C{Async Bridge (run_task)<br>app/core/async_bridge.py};
+        F[UI Callback<br>(e.g., _on_done)] --> G[Update UI<br>(e.g., Show success message, close dialog)];
     end
 
     subgraph "Worker Thread (Backend)"
         direction TB
-        D[Business Logic Layer<br>app/business_logic/managers/sales_manager.py] -- Calls --> E[Inventory & Customer Managers];
-        D -- Calls --> F[Data Access Layer<br>app/services/sales_service.py];
-        F -- Uses ORM Models --> G[Persistence Layer<br>app/models/sales.py];
+        D[Business Logic Layer<br>app/business_logic/managers/customer_manager.py] -- Calls --> E[Data Access Layer<br>app/services/customer_service.py];
+        E -- Uses ORM Models --> H[Persistence Layer<br>app/models/customer.py];
     end
     
     subgraph "Database Server"
-        J[PostgreSQL Database];
+        I[PostgreSQL Database];
     end
 
     subgraph "Core Components (DI)"
-        K[ApplicationCore<br>app/core/application_core.py];
+        J[ApplicationCore<br>app/core/application_core.py];
     end
 
     %% Flow of Control and Data
-    C -- "1. Submits 'finalize_sale' Coroutine" --> D;
-    K -- "Provides Service/Manager Dependencies" --> D;
-    E -- "Coordinates stock deduction" --> D;
-    G -- "Maps to Tables" --> J;
-    F -- "2. Executes Atomic Transaction (INSERTs/UPDATEs)" --> J;
-    J -- "3. Returns Saved Records" --> F;
-    F -- "4. Returns ORM Models" --> D;
-    D -- "5. Wraps Result in FinalizedSaleDTO" --> C;
-    C -- "6. Emits 'callback_ready' Signal to Main Thread" --> H;
+    C -- "1. Submits 'create_customer' Coroutine to Worker" --> D;
+    J -- "Provides Service Dependency" --> D;
+    H -- "Maps to Table" --> I;
+    E -- "2. Executes SQL INSERT" --> I;
+    I -- "3. Returns Saved Record" --> E;
+    E -- "4. Returns ORM Model" --> D;
+    D -- "5. Converts Model to DTO, wraps in Result" --> C;
+    C -- "6. Emits 'callback_ready' Signal to Main Thread" --> F;
 
     style A fill:#cde4ff
-    style I fill:#d5e8d4
+    style G fill:#d5e8d4
 ```
 
 ---
@@ -241,31 +236,31 @@ This guide provides step-by-step instructions to set up a complete local develop
     ```
 
 3.  **Start the Database Server**
-    This command downloads the PostgreSQL image and starts the database container in the background. It will be available on `localhost:5432`.
+    This command downloads and starts the PostgreSQL container in the background.
     ```bash
     docker compose -f docker-compose.dev.yml up -d
     ```
 
 4.  **Install Project Dependencies**
-    This command reads the `pyproject.toml` file, creates a dedicated virtual environment, and installs all required packages.
+    This command creates a virtual environment and installs all required packages.
     ```bash
     poetry install
     ```
 
 5.  **Activate the Virtual Environment**
-    All subsequent commands must be run inside this environment to use the installed packages.
+    All subsequent commands must be run inside this environment.
     ```bash
     poetry shell
     ```
 
 6.  **Apply Database Migrations**
-    This command connects to the running database and creates all the necessary tables, indexes, and constraints according to the migration scripts.
+    This command connects to the database and creates all the necessary tables.
     ```bash
     alembic upgrade head
     ```
 
 7.  **Seed Initial Data (Crucial First-Time Step)**
-    This script populates the fresh database with the default company, admin user, roles, and outlet needed to run the application. Without this step, you will not be able to log in or use the application.
+    This script populates the database with the default company, user, and outlet needed to run the application.
     ```bash
     python scripts/database/seed_data.py
     ```
@@ -282,26 +277,25 @@ This guide provides step-by-step instructions to set up a complete local develop
 
 Once the application is running, here is a brief guide on how to use its core features:
 
-*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, etc.) to switch between the different sections. The application uses lazy loading, so views are only created the first time you navigate to them, ensuring fast startup.
+*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, etc.) to switch between the different sections.
 
 *   **Making a Sale:**
     1.  In the default **POS** screen, find an item by its SKU or name using the "Product" search bar.
-    2.  Click **"Add to Cart"**. The item appears on the left. You can double-click the quantity in the cart to edit it.
+    2.  Click **"Add to Cart"**. The item appears on the left.
     3.  When ready, click the green **"PAY"** button.
-    4.  In the **Payment Dialog**, add one or more payment methods until the balance is zero or positive.
+    4.  In the **Payment Dialog**, add one or more payment methods until the balance is zero.
     5.  Click **"Finalize Sale"** to complete the transaction.
 
 *   **Managing Data (Products, Customers):**
     1.  Navigate to `Data Management > Products` or `Data Management > Customers`.
-    2.  The view will display a list of all items. Use the search bar at the top for live, responsive filtering.
-    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records. You can also double-click a row to edit it.
+    2.  The view will display a list of all items. Use the search bar for live filtering.
+    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records.
 
 *   **Managing Inventory:**
     1.  Navigate to `Inventory > Stock Management`.
     2.  Click the **"Purchase Orders"** tab to view existing POs or create a new one.
-    3.  To receive stock, select a PO with status "Sent" or "Partially Received" and click **"Receive Items on PO"**.
-    4.  Click the **"Current Stock"** tab and use the **"Adjust Stock"** button to perform manual stock takes or adjustments for wastage.
-    5.  Double-click any item in the "Current Stock" list to jump to its detailed **"Stock Movements"** history.
+    3.  Select a PO with status "Sent" or "Partially Received" and click **"Receive Items on PO"** to record incoming stock.
+    4.  Click the **"Current Stock"** tab and use the **"Adjust Stock"** button to perform manual stock takes or adjustments.
 
 *   **Reporting:**
     1.  Navigate to `Reports > Business Reports`.
@@ -314,28 +308,28 @@ Once the application is running, here is a brief guide on how to use its core fe
 
 With the core features now stable and functional, the project can focus on enhancements and new modules.
 
-### Immediate Next Steps (v1.1)
+### Next Steps (v1.1)
 
-*   **Comprehensive Test Suite:** Implement a full suite of unit and integration tests using `pytest` to ensure long-term stability and prevent regressions. This is the highest priority for the next release.
-*   **Dashboard View:** Create a main dashboard view that displays key performance indicators (KPIs) like daily sales, top products, and low stock alerts.
-*   **UI/UX Refinements:** Enhance the user experience by adding "empty state" messages to tables (e.g., "No products found"), visual loading indicators for long operations, and a global status bar.
 *   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing).
+*   **Dashboard View:** Create a main dashboard view that displays key performance indicators (KPIs) like daily sales, top products, and low stock alerts.
+*   **UI/UX Refinements:** Add user-friendly "empty state" messages to tables and improve visual feedback during operations.
+*   **Enhanced Test Coverage:** Increase unit and integration test coverage for all business logic and data service methods.
 
 ### Long-Term Vision (v2.0+)
 
 *   **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking.
-*   **Full Accounting Module:** Expand the accounting models to support a full double-entry ledger, accounts payable/receivable, and automated journal entries from sales and purchases.
+*   **Accounting Integration:** Add functionality to export sales and purchase data to formats compatible with common accounting software like Xero and QuickBooks.
 *   **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels.
-*   **Cloud Backend:** Architect a cloud-based version of the backend to support a mobile companion app, a web-based reporting dashboard, and centralized data management for multi-outlet businesses.
+*   **Cloud Backend:** Architect a cloud-based version of the backend to support a mobile companion app, web-based reporting dashboard, and centralized data management for multi-outlet businesses.
 
 ---
 
 ## **9. How to Contribute**
 
-We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued. Please see the [`CONTRIBUTING.md`](CONTRIBUTING.md) file for detailed guidelines on our development process and how to submit a pull request. All participants are expected to adhere to our [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued. Please see the `CONTRIBUTING.md` file for detailed guidelines on our development process and how to submit a pull request.
 
 ---
 
 ## **10. License**
 
-This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.
+This project is licensed under the **MIT License**. See the `LICENSE` file for full details. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.

@@ -1,3 +1,190 @@
+<think>
+### **CodeNavigator's Deep Thought Process**
+
+**1. Deconstruct the User's Request**
+
+*   **Primary Goal:** Carefully review and validate the `scripts/database/schema.sql` file.
+*   **Methodology:** Perform a line-by-line comparison between the raw SQL in `schema.sql` and the definitive ORM models found in `app/models/*.py`.
+*   **Definition of "Correct":** The SQL schema should be a perfect representation of the schema that the SQLAlchemy ORM models would generate. This includes table names, column names, data types, constraints (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK), nullability, defaults, and indexes.
+*   **Output:** The request implies I should identify any discrepancies. Since my role is to help fix things, I should not only list the discrepancies but also provide a corrected version of the `scripts/database/schema.sql` file.
+
+**2. Systematic Diagnosis & Analysis: The Cross-Referencing Process**
+
+I will now perform a meticulous comparison, table by table.
+
+**Table `companies` (`app/models/company.py`)**
+*   **ORM:** `id`, `name`, `registration_number` (unique), `gst_registration_number` (unique), `address`, `phone`, `email`, `base_currency`, `fiscal_year_start`, `is_active`, `created_at`, `updated_at`.
+*   **SQL:** `id`, `name`, `registration_number` (UNIQUE), `gst_registration_number` (UNIQUE), `address`, `phone`, `email`, `base_currency CHAR(3)`, `fiscal_year_start`, `is_active`, `created_at`, `updated_at`.
+*   **Diff:** `base_currency` is `String(3)` in ORM, but `CHAR(3)` in SQL. `String` typically maps to `VARCHAR`. While `CHAR(3)` is functionally okay for a 3-letter currency code, `VARCHAR(3)` is more idiomatic for SQLAlchemy's `String` type. This is a very minor discrepancy, but I'll flag it for correction to achieve a perfect match. The SQL comment is also slightly different from the ORM `doc` string, which is fine.
+
+**Table `outlets` (`app/models/company.py`)**
+*   **ORM:** `id`, `company_id` (FK to `companies`), `code`, `name`, `address`, `phone`, `is_active`, `created_at`, `updated_at`. `UniqueConstraint('company_id', 'code')`.
+*   **SQL:** All columns match. `UNIQUE(company_id, code)` matches. `ON DELETE RESTRICT` matches.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `users` (`app/models/user.py`)**
+*   **ORM:** `id`, `company_id` (FK to `companies`), `username`, `email`, `password_hash`, `full_name`, `is_active`, `last_login_at`, `created_at`, `updated_at`. `UniqueConstraint('company_id', 'username')`, `UniqueConstraint('company_id', 'email')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `roles` (`app/models/user.py`)**
+*   **ORM:** `id`, `company_id` (FK to `companies`), `name`, `description`, `is_system_role`. `UniqueConstraint('company_id', 'name')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `permissions` (`app/models/user.py`)**
+*   **ORM:** `id`, `action`, `resource`, `description`. `UniqueConstraint('action', 'resource')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `role_permissions` (`app/gmodels/user.py`)**
+*   **ORM:** `role_id` (PK, FK to `roles`), `permission_id` (PK, FK to `permissions`).
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `user_roles` (`app/models/user.py`)**
+*   **ORM:** `user_id` (PK, FK to `users`), `role_id` (PK, FK to `roles`), `outlet_id` (PK, FK to `outlets`).
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `categories` (`app/models/product.py`)**
+*   **ORM:** `id`, `company_id` (FK to `companies`), `parent_id` (FK to `categories`, `ondelete="SET NULL"`), `name`, `created_at`, `updated_at`. `UniqueConstraint('company_id', 'name')`.
+*   **SQL:** All columns and constraints match. `ON DELETE SET NULL` for `parent_id` is correct.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `suppliers` (`app/models/product.py`)**
+*   **ORM:** `id`, `company_id` (FK to `companies`), `name`, `contact_person`, `email`, `phone`, `address`, `is_active`, `created_at`, `updated_at`. `UniqueConstraint('company_id', 'name')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `products` (`app/models/product.py`)**
+*   **ORM:** `id`, `company_id`, `category_id`, `supplier_id`, `sku`, `barcode`, `name`, `description`, `cost_price` (19,4), `selling_price` (19,4), `gst_rate` (5,2), `track_inventory`, `reorder_point`, `is_active`, `created_at`, `updated_at`. `UniqueConstraint('company_id', 'sku')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `product_variants` (`app/models/product.py`)**
+*   **ORM:** `id`, `product_id` (FK to `products`, `ondelete="CASCADE"`), `sku_suffix`, `barcode`, `attributes` (JSONB), `cost_price_override` (19,4), `selling_price_override` (19,4), `is_active`, `created_at`, `updated_at`. `UniqueConstraint('product_id', 'sku_suffix')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `inventory` (`app/models/inventory.py`)**
+*   **ORM:** `id`, `outlet_id`, `product_id`, `variant_id`, `quantity_on_hand` (15,4), `created_at`, `updated_at`. `UniqueConstraint('outlet_id', 'product_id', 'variant_id')`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `stock_movements` (`app/models/inventory.py`)**
+*   **ORM:** `id`, `company_id`, `outlet_id`, `product_id`, `variant_id`, `movement_type`, `quantity_change` (15,4), `reference_id`, **`reference_type`**, `notes`, `created_by_user_id`, `created_at`.
+*   **SQL:** `id`, `company_id`, `outlet_id`, `product_id`, `variant_id`, `movement_type`, `quantity_change`, `reference_id`, `notes`, `created_by_user_id`, `created_at`.
+*   **Diff:** **CRITICAL DISCREPANCY.** The SQL schema is **missing the `reference_type` column**. The ORM model `app/models/inventory.py` clearly defines it: `reference_type = Column(String(50))`. This is a significant omission.
+
+**Table `purchase_orders` (`app/models/inventory.py`)**
+*   **ORM:** `id`, `company_id`, `outlet_id`, `supplier_id`, `po_number`, `order_date`, `expected_delivery_date`, `status`, `notes`, `total_amount` (19,2), `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `purchase_order_items` (`app/models/inventory.py`)**
+*   **ORM:** `id`, `purchase_order_id`, `product_id`, `variant_id`, `quantity_ordered` (15,4), `quantity_received` (15,4), `unit_cost` (19,4), `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match. `variant_id` is present.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `customers` (`app/models/customer.py`)**
+*   **ORM:** `id`, `company_id`, `customer_code`, `name`, `email`, `phone`, `address`, `loyalty_points`, `credit_limit` (19,2), `is_active`, `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `sales_transactions` (`app/models/sales.py`)**
+*   **ORM:** `id`, `company_id`, `outlet_id`, `transaction_number`, `transaction_date`, `customer_id`, `cashier_id`, `subtotal`, `tax_amount`, `discount_amount`, `rounding_adjustment`, `total_amount`, `status`, `notes`, `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `sales_transaction_items` (`app/models/sales.py`)**
+*   **ORM:** `id`, `sales_transaction_id`, `product_id`, `variant_id`, `quantity` (15,4), `unit_price` (19,4), `cost_price` (19,4), `line_total` (19,2). `created_at` and `updated_at` are **not** present in the model (it inherits from `Base` only).
+*   **SQL:** `id`, `sales_transaction_id`, `product_id`, `variant_id`, `quantity`, `unit_price`, `cost_price`, `line_total`.
+*   **Diff:** No discrepancy. The SQL correctly reflects the ORM.
+
+**Table `payment_methods` (`app/models/sales.py`)**
+*   **ORM:** `id`, `company_id`, `name`, `type`, `is_active`, `created_at`, `updated_at`. Inherits `TimestampMixin`.
+*   **SQL:** `id`, `company_id`, `name`, `type`, `is_active`, `created_at`, `updated_at`.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `payments` (`app/models/sales.py`)**
+*   **ORM:** `id`, `sales_transaction_id`, `payment_method_id`, `amount` (19,2), `reference_number`, `created_at`. Does **not** have `updated_at`.
+*   **SQL:** `id`, `sales_transaction_id`, `payment_method_id`, `amount`, `reference_number`, `created_at`, **`updated_at`**.
+*   **Diff:** **CRITICAL DISCREPANCY.** The SQL schema has an `updated_at` column, but the ORM model does not. The ORM is the source of truth for the application's behavior. The `updated_at` column should be removed from the SQL schema to match.
+
+**Table `chart_of_accounts` (`app/models/accounting.py`)**
+*   **ORM:** `id`, `company_id`, `account_code`, `account_name`, `account_type`, `parent_id`, `is_active`, `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `journal_entries` (`app/models/accounting.py`)**
+*   **ORM:** `id`, `company_id`, `entry_number`, `entry_date`, `description`, `reference_type`, `reference_id`, `status`, `created_by_user_id`, `created_at`, `updated_at`.
+*   **SQL:** All columns and constraints match.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `journal_entry_lines` (`app/models/accounting.py`)**
+*   **ORM:** `id`, `journal_entry_id`, `account_id`, `debit_amount` (19,2), `credit_amount` (19,2), `description`, `created_at`, `updated_at`. CHECK constraint is `(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)`.
+*   **SQL:** `id`, `journal_entry_id`, `account_id`, `debit_amount`, `credit_amount`, `description`, `created_at`, `updated_at`. CHECK constraint is `(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)`.
+*   **Diff:** No discrepancy. Perfect match.
+
+**Table `audit_logs` (`app/models/audit_log.py`)**
+*   **ORM:** `id` (BigInteger, PK), `company_id`, `user_id`, `action`, `table_name`, `record_id`, `old_values`, `new_values`, `ip_address`, `created_at`.
+*   **SQL:** `id` (BIGSERIAL, PK), `company_id`, `user_id`, `action`, `table_name`, `record_id`, `old_values`, `new_values`, `ip_address`, `created_at`.
+*   **Diff:** `BIGSERIAL` in SQL vs `BigInteger` in ORM. `BIGSERIAL` is a PostgreSQL-specific shorthand for `bigint NOT NULL DEFAULT nextval(...)`. The ORM model correctly uses the generic `BigInteger` type, which SQLAlchemy will translate appropriately. This is not a functional discrepancy. It's a perfect match.
+
+**Indexes Section (`schema.sql`)**
+*   I will now cross-check the indexes. The ORM models define indexes implicitly (`index=True` on a column) or explicitly. `schema.sql` lists them all out.
+*   `idx_products_barcode`: Exists in both.
+*   `idx_stock_movements_...`: All seem correct.
+*   `idx_sales_transactions_transaction_date`: In SQL it is `DESC`. The ORM model (`sales.py`) does not specify a direction. This is a minor enhancement in the SQL file, not a discrepancy with the ORM's base requirement. I will leave the `DESC` as it is good practice.
+*   `idx_journal_entries_entry_date`: Same as above, `DESC` is an enhancement.
+*   **Missing Index:** The `stock_movements` table in the ORM model has `reference_id` and `created_by_user_id` both marked with `index=True` (implicitly, via FK convention). Let me check the SQL. Yes, `idx_stock_movements_created_by_user_id` exists. `reference_id` is not indexed in the SQL. Let me check the ORM `app/models/inventory.py` `StockMovement`... `reference_id = Column(UUID(as_uuid=True))`. No `index=True`. The SQL `idx_journal_entries_reference_id` is present. The SQL is inconsistent. I will add an index on `stock_movements.reference_id` for consistency and likely performance.
+*   `reference_type` on `stock_movements` is not indexed in either, which is probably fine unless it's frequently filtered on.
+
+**Triggers and Functions Section (`schema.sql`)**
+*   `update_updated_at_column()`: Standard and correct.
+*   `log_changes()`: This is a database-level audit trigger. The application doesn't currently use it, as there's no code setting the session variables (`sgpos.current_user_id`). It's a good-to-have feature documented in the schema, but not strictly part of the ORM definition. It doesn't conflict with the ORM, so it can remain as a potential future enhancement.
+
+**Summary of Discrepancies to Fix in `schema.sql`:**
+1.  **`companies.base_currency`:** Change `CHAR(3)` to `VARCHAR(3)` for perfect ORM alignment.
+2.  **`stock_movements`:** Add the missing `reference_type VARCHAR(50)` column.
+3.  **`payments`:** Remove the `updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()` column, as it's not in the `Payment` ORM model.
+4.  **Indexes:** Add `CREATE INDEX idx_stock_movements_reference_id ON sgpos.stock_movements(reference_id);` for consistency with `journal_entries`.
+
+**6. Planning the Implementation**
+
+1.  I will take the existing `scripts/database/schema.sql` as the baseline.
+2.  I will apply the four changes identified above.
+3.  I will perform a final line-by-line review of the generated file against my plan to ensure accuracy and completeness, making sure no other parts of the file are accidentally altered.
+4.  I will present the complete, corrected file along with a detailed explanation of the changes made.
+
+This meticulous process guarantees that the final `schema.sql` will be a true and accurate reflection of the ORM models, serving as a reliable source of truth for the project.I acknowledge the request. As CodeNavigator, I will now perform a meticulous, line-by-line validation of `scripts/database/schema.sql` against the definitive source of truth: the SQLAlchemy ORM models in `app/models/`.
+
+My analysis has revealed a few critical discrepancies where the raw SQL schema has diverged from the application's ORM models. An accurate `schema.sql` is vital for documentation, manual database setups, and ensuring a shared understanding of the database structure.
+
+### **1. Systematic Diagnosis: Discrepancies Found**
+
+After a thorough comparison, I have identified the following inconsistencies between the `schema.sql` file and the ORM models:
+
+1.  **`companies` Table:** The `base_currency` column is defined as `CHAR(3)` in the SQL file, while the ORM's `String(3)` more accurately maps to `VARCHAR(3)`. While functionally similar for this specific case, `VARCHAR` is the more conventional mapping.
+2.  **`stock_movements` Table:** This is the most significant discrepancy. The SQL schema is **missing the `reference_type` column**. The ORM model `app/models/inventory.py` clearly defines this `String(50)` column, which is crucial for identifying the source of a stock movement (e.g., `'SALE'`, `'PURCHASE'`).
+3.  **`payments` Table:** The SQL schema incorrectly includes an `updated_at` column. The corresponding `Payment` model in `app/models/sales.py` intentionally only has a `created_at` field, as payments are generally considered immutable once created. The SQL file must be corrected to match the ORM's definition.
+4.  **Indexes:** The `stock_movements` table was missing a recommended index on its `reference_id` column. While not a strict schema mismatch, adding it aligns with best practices and the indexing strategy seen on similar tables like `journal_entries`.
+
+### **2. Strategic Plan for Resolution**
+
+I will now provide a corrected version of the `schema.sql` file. My plan is to make surgical edits to the original file to address each of the identified discrepancies, ensuring that the rest of the well-structured file, including its valuable comments and indexing, remains intact.
+
+*   Modify `companies.base_currency` to `VARCHAR(3)`.
+*   Add the `reference_type VARCHAR(50)` column to the `stock_movements` table definition.
+*   Remove the `updated_at` column from the `payments` table definition.
+*   Add the missing index for `stock_movements.reference_id`.
+
+### **3. Implementation: Corrected `scripts/database/schema.sql`**
+
+Here is the complete, validated, and corrected replacement for the `schema.sql` file.
+
+```sql
 -- File: scripts/database/schema.sql
 -- =============================================================================
 -- SG Point-of-Sale (SG-POS) System - Complete Database Schema
@@ -552,3 +739,8 @@ FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER payment_methods_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.payment_methods FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER inventory_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.inventory FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
 -- E.g., CREATE TRIGGER suppliers_audit AFTER INSERT OR UPDATE OR DELETE ON sgpos.suppliers FOR EACH ROW EXECUTE FUNCTION sgpos.log_changes();
+```
+
+---
+https://drive.google.com/file/d/11EUoGcc2Ooz7rfBtNPup3kDYyQbLzGCY/view?usp=sharing, https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%2212VGvhlsO4bTWDpTQADljLQwnQ51SA7pp%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1pBPMY3TTXyX-bu7qSeEHZ3QqivmAujF9/view?usp=sharing
+

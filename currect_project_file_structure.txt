@@ -11,10 +11,12 @@ app/ui/__init__.py
 app/ui/dialogs/stock_adjustment_dialog.py
 app/ui/dialogs/__init__.py
 app/ui/dialogs/customer_dialog.py
+app/ui/dialogs/receive_po_dialog.py
 app/ui/dialogs/product_dialog.py
 app/ui/dialogs/purchase_order_dialog.py
 app/ui/dialogs/__pycache__/__init__.cpython-312.pyc
 app/ui/dialogs/__pycache__/payment_dialog.cpython-312.pyc
+app/ui/dialogs/__pycache__/receive_po_dialog.cpython-312.pyc
 app/ui/dialogs/__pycache__/user_dialog.cpython-312.pyc
 app/ui/dialogs/__pycache__/stock_adjustment_dialog.cpython-312.pyc
 app/ui/dialogs/__pycache__/customer_dialog.cpython-312.pyc
@@ -60,6 +62,8 @@ app/services/__pycache__/purchase_order_service.cpython-312.pyc
 app/services/__pycache__/customer_service.cpython-312.pyc
 app/services/__pycache__/__init__.cpython-312.pyc
 app/services/__pycache__/product_service.cpython-312.pyc
+app/services/__pycache__/report_service.cpython-312.pyc
+app/services/__pycache__/company_service.cpython-312.pyc
 app/services/__pycache__/inventory_service.cpython-312.pyc
 app/services/__pycache__/base_service.cpython-312.pyc
 app/services/__pycache__/user_service.cpython-312.pyc
@@ -107,9 +111,11 @@ app/business_logic/managers/product_manager.py
 app/business_logic/managers/user_manager.py
 app/business_logic/managers/__pycache__/__init__.cpython-312.pyc
 app/business_logic/managers/__pycache__/customer_manager.cpython-312.pyc
+app/business_logic/managers/__pycache__/reporting_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/inventory_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/base_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/user_manager.cpython-312.pyc
+app/business_logic/managers/__pycache__/company_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/product_manager.cpython-312.pyc
 app/business_logic/managers/customer_manager.py
 app/business_logic/managers/reporting_manager.py

@@ -1,0 +1,36 @@
+"""
+Update check constraint on journal_entry_lines - NEUTERED
+
+Revision ID: 1a2b3c4d5e6f
+Revises: d5a6759ef2f7
+Create Date: 2024-06-18 10:00:00.000000
+
+This migration was originally auto-generated to fix a discrepancy in the
+initial schema. The initial schema has since been corrected at its source
+(in migration d5a6759ef2f7). Therefore, the operations in this migration
+are now superfluous and have been removed to prevent errors when migrating
+a fresh database. The file is kept to preserve a linear history.
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+# revision identifiers, used by Alembic.
+revision = '1a2b3c4d5e6f'
+down_revision = 'd5a6759ef2f7'
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # The changes intended by this migration have been consolidated into
+    # the initial migration (d5a6759ef2f7).
+    # This upgrade path is now intentionally empty.
+    pass
+
+
+def downgrade() -> None:
+    # The changes intended by this migration have been consolidated into
+    # the initial migration (d5a6759ef2f7).
+    # This downgrade path is now intentionally empty.
+    pass

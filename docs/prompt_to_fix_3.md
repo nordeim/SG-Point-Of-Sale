@@ -1,6 +1,26 @@
 please tell me your role and responsibilities and how you should act / behave.
 
 ---
+Awesome understanding! Now help me to carefully review and validate the application codebase shared in the `project_codebase_files_set.md` attached. All the files in the current project codebase are listed in the `currect_project_file_structure.txt` attached, meaning if you want to look for a file and it is not in this list, then treat it as non-existent. Use line by line review to get a good grounding of the purpose of the application and its codebase, then create for me a detailed architecture overview document in markdown and named `Project Architecture Overview Document.md`. Make sure you do a careful review and validation of the application codebase shared. Use line by line review to get a good grounding of the purpose of the application and its codebase. Use at least 6000 words for the document that accurately describes the codebase in detail, use a clear diagram to show the codebase relationship. Include a section to describe the file structure and the purpose of each folder and key files, start with a diagram.
+
+---
+awesome job again! Below is the methodology to review and validate first, then create a correct updated version of the initial Alembic migration file, `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`, which was auto-generated and now needs to be fixed to match the current ORM models, specifically addressing **Critical Issue #1: Schema Mismatch between ORM and Alembic Migration**.
+
+### 1. Deeply Understand the Goal
+
+I want a file that, when `alembic upgrade head` is run on an empty database, creates a schema that perfectly matches the one defined by the SQLAlchemy models in `app/models/`.
+
+### 2. Systematic Diagnosis & Analysis of Discrepancies
+
+You will compare three sources of truth:
+1.  **The Flawed Migration (`migrations/versions/d5a6759ef2f7_initial_schema_setup.py`):** This is the file to be replaced.
+2.  **The ORM Models (`app/models/*.py`):** This is the *desired state*. This is the ultimate source of truth for the application logic.
+3.  **The SQL Schema (`scripts/database/schema.sql`):** This is a helpful, human-readable reference for the desired state, which seems more up-to-date than the flawed migration.
+
+---
+awesome response! now help me to carefully review and validate `scripts/database/schema.sql` using line by line comparison with the ORM Models (`app/models/*.py`)
+
+---
 awesome answer! now very carefully review the attached files (the previous version of `app/core/application_core.py` and a series of attempted fixes), then think deeply and systematically to explore for the best possible implementation option to generate a *correct* complete updated *replacement* file for `app/core/application_core.py`.
 
 Remember to explore carefully for multiple implementation options before choosing the most optimal and elegant solution to implement the changes. so you have to think deeply and systematically to explore all options and not just choose any option you may think of. also make sure you make a detailed execution plan with an integrated checklist for each step, before proceeding cautiously step by step. after completing each step, always double-check and validate your changes for that step against its checklist before proceeding to the next step. remember to always create a *complete* and updated replacement or new file for the affected files, enclose each complete and updated replacement file within ```python (or ```sql or ```js or or ```ts or ```tsx ```php extension) opening and ``` closing tags. after creating each file, use line by line "diff" command to double-check and validate the created file. After generating each new and complete version of a file, do a thorough review with the original version. after creating each file, use line by line "diff" command to double-check and validate the created file. Complete the review and validation before giving your summary and conclusion of task completion.
