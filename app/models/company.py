@@ -46,7 +46,7 @@ class Outlet(Base, TimestampMixin):
     __tablename__ = "outlets"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the outlet")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
     code = Column(String(50), nullable=False, doc="Unique code for the outlet within the company")
     name = Column(String(255), nullable=False, doc="Name of the outlet")
     address = Column(Text, doc="Physical address of the outlet")

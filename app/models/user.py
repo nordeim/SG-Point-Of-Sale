@@ -2,7 +2,7 @@
 """SQLAlchemy models for User, Role, and Permission entities."""
 import uuid
 from datetime import datetime
-from typing import List # Import List for type hinting
+from typing import List
 import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,7 +15,7 @@ class User(Base, TimestampMixin):
     __tablename__ = "users"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the user")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
     username = Column(String(100), nullable=False, doc="Unique username for login")
     email = Column(String(255), nullable=False, doc="User's email address")
     password_hash = Column(String(255), nullable=False, doc="Hashed password using bcrypt")
@@ -46,7 +46,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the role")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, doc="Foreign key to the owning company")
     name = Column(String(50), nullable=False, doc="Name of the role (unique per company)")
     description = Column(Text, doc="Description of the role's responsibilities")
     is_system_role = Column(Boolean, nullable=False, default=False, doc="True for built-in roles that cannot be deleted or modified by users")
@@ -80,8 +80,8 @@ class RolePermission(Base):
     """Junction table linking roles to their permissions."""
     __tablename__ = "role_permissions"
 
-    role_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
-    permission_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.permissions.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the permission")
+    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
+    permission_id = Column(UUID(as_uuid=True), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the permission")
 
     # Relationships
     role = relationship("Role", back_populates="role_permissions", doc="The role associated with this permission")
@@ -91,9 +91,9 @@ class UserRole(Base):
     """Assigns roles to users, potentially on a per-outlet basis."""
     __tablename__ = "user_roles"
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the user")
-    role_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the assigned outlet (part of composite PK)")
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the user")
+    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the assigned outlet (part of composite PK)")
 
     # Relationships
     user = relationship("User", back_populates="user_roles", doc="The user assigned to this role")

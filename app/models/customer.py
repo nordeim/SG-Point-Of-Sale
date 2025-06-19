@@ -10,7 +10,7 @@ from app.models.base import Base, TimestampMixin
 class Customer(Base, TimestampMixin):
     __tablename__ = "customers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
     customer_code = Column(String(50), nullable=False)
     name = Column(String(255), nullable=False)
     email = Column(String(255))

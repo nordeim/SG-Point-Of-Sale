@@ -11,8 +11,8 @@ from app.models.base import Base
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(BigInteger, primary_key=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id", ondelete="SET NULL"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(50), nullable=False)
     table_name = Column(String(100), nullable=False)
     record_id = Column(UUID(as_uuid=True), nullable=False)

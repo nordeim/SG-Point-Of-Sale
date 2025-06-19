@@ -1,4 +1,4 @@
-# File: pyproject.toml
+# pyproject.toml
 [tool.poetry]
 # --- Project Metadata ---
 # This information is used for packaging the application and for display on

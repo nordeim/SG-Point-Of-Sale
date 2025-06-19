@@ -12,12 +12,12 @@ from app.models.base import Base, TimestampMixin
 class SalesTransaction(Base, TimestampMixin):
     __tablename__ = "sales_transactions"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
     transaction_number = Column(String(50), nullable=False)
     transaction_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.customers.id"), nullable=True, index=True)
-    cashier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=False, index=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True, index=True)
+    cashier_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     subtotal = Column(Numeric(19, 2), nullable=False)
     tax_amount = Column(Numeric(19, 2), nullable=False)
     discount_amount = Column(Numeric(19, 2), nullable=False, default=0)
@@ -31,21 +31,20 @@ class SalesTransaction(Base, TimestampMixin):
     cashier = relationship("User", back_populates="sales_transactions")
     items = relationship("SalesTransactionItem", back_populates="sales_transaction", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="sales_transaction", cascade="all, delete-orphan")
-    # FIX: Add explicit primaryjoin to tell SQLAlchemy how to link this to JournalEntry
     journal_entries = relationship(
         "JournalEntry",
         primaryjoin="and_(SalesTransaction.id == foreign(JournalEntry.reference_id), JournalEntry.reference_type == 'SALE')",
         back_populates="sales_transaction",
-        viewonly=True  # Usually a good idea for such reverse relationships to prevent accidental modifications
+        viewonly=True
     )
     __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint("status IN ('COMPLETED', 'VOIDED', 'HELD')", name="chk_sales_transaction_status"))
 
 class SalesTransactionItem(Base):
     __tablename__ = "sales_transaction_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
+    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
     quantity = Column(Numeric(15, 4), nullable=False)
     unit_price = Column(Numeric(19, 4), nullable=False)
     cost_price = Column(Numeric(19, 4), nullable=False)
@@ -58,7 +57,7 @@ class SalesTransactionItem(Base):
 class PaymentMethod(Base, TimestampMixin):
     __tablename__ = "payment_methods"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(50), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -69,8 +68,8 @@ class PaymentMethod(Base, TimestampMixin):
 class Payment(Base):
     __tablename__ = "payments"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
-    payment_method_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.payment_methods.id"), nullable=False, index=True)
+    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    payment_method_id = Column(UUID(as_uuid=True), ForeignKey("payment_methods.id"), nullable=False, index=True)
     amount = Column(Numeric(19, 2), nullable=False)
     reference_number = Column(String(100))
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)

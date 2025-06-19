@@ -12,8 +12,8 @@ from app.models.base import Base, TimestampMixin
 class Category(Base, TimestampMixin):
     __tablename__ = "categories"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id", ondelete="SET NULL"), nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(255), nullable=False)
     company = relationship("Company")
     products = relationship("Product", back_populates="category")
@@ -23,7 +23,7 @@ class Category(Base, TimestampMixin):
 class Supplier(Base, TimestampMixin):
     __tablename__ = "suppliers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     contact_person = Column(String(255))
     email = Column(String(255))
@@ -38,16 +38,16 @@ class Supplier(Base, TimestampMixin):
 class Product(Base, TimestampMixin):
     __tablename__ = "products"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    category_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id"), nullable=True, index=True)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True, index=True)
     sku = Column(String(100), nullable=False)
     barcode = Column(String(100), index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     cost_price = Column(Numeric(19, 4), nullable=False, default=0)
     selling_price = Column(Numeric(19, 4), nullable=False)
-    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("9.00")) # FIX: Updated GST Rate
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("9.00"))
     track_inventory = Column(Boolean, nullable=False, default=True)
     reorder_point = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -64,7 +64,7 @@ class Product(Base, TimestampMixin):
 class ProductVariant(Base, TimestampMixin):
     __tablename__ = "product_variants"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     sku_suffix = Column(String(100), nullable=False)
     barcode = Column(String(100))
     attributes = Column(JSONB, nullable=False)

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/main/Dashboard_view.png" alt="SG-POS System Dashboard" width="700"/>
+  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/refs/heads/main/POS_home_screen.png" alt="SG-POS System Screenshot" width="700"/>
 </p>
 
 <h1 align="center">SG Point-of-Sale (SG-POS) System</h1>
@@ -46,13 +46,12 @@
 *   [6. Developer Setup & Deployment Guide](#6-developer-setup--deployment-guide)
     *   [Prerequisites](#prerequisites)
     *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
-*   [7. Running the Test Suite](#7-running-the-test-suite)
-*   [8. User Guide: Running the Application](#8-user-guide-running-the-application)
-*   [9. Project Roadmap](#9-project-roadmap)
+*   [7. User Guide: Running the Application](#7-user-guide-running-the-application)
+*   [8. Project Roadmap](#8-project-roadmap)
     *   [Immediate Next Steps (v1.1)](#immediate-next-steps-v11)
     *   [Long-Term Vision (v2.0+)](#long-term-vision-v20)
-*   [10. How to Contribute](#10-how-to-contribute)
-*   [11. License](#11-license)
+*   [9. How to Contribute](#9-how-to-contribute)
+*   [10. License](#10-license)
 
 ---
 
@@ -66,20 +65,19 @@ This project is built with an obsessive focus on quality, both in the user exper
 
 ## **2. Current Features & Status**
 
-The application is in a **stable** state, with a robust architecture and a wide range of functional core features. The UI has been significantly enhanced for a better user experience, and a foundational automated test suite is now in place to guarantee reliability.
+The application is currently in a **stable** state, with a robust architecture and a wide range of functional core features. All major bugs identified during the initial development phase have been resolved.
 
 | Feature Area                      | Status                  | Notes                                                                                                                              |
 | --------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Dashboard**                     | ✅ **Functional**       | A new dashboard view provides at-a-glance KPIs for daily sales, transactions, new customers, and low-stock items.                   |
 | **Sales & Checkout**              | ✅ **Functional**       | Core sales processing, cart management, split-tender payment collection, and receipt data generation are fully working.                |
-| **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers. Table view provides loading and empty-state feedback.        |
-| **Product Management**            | ✅ **Functional**       | Full CRUD operations for products, with responsive, debounced searching. Table view provides loading and empty-state feedback.        |
-| **User & Role Management**        | ✅ **Functional**       | Full CRUD operations for users, including multi-role assignment. Table view provides loading and empty-state feedback.                |
-| **Payment Methods Management**    | ✅ **Functional**       | A new UI in Settings allows for full CRUD operations on payment methods, replacing the previous placeholder.                           |
-| **Inventory Management**          | ✅ **Functional**       | All inventory tables (summary, POs, movements) now provide clear loading/empty state feedback. All core functions are stable.       |
+| **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers are implemented via the `CustomerView` and `CustomerDialog`.     |
+| **Product Management**            | ✅ **Functional**       | Full CRUD operations for products are implemented via the `ProductView` and `ProductDialog`, with responsive, debounced searching.       |
+| **User & Role Management**        | ✅ **Functional**       | `SettingsView` provides full CRUD operations for users, including multi-role assignment via a dedicated `UserDialog`.                    |
+| **Inventory Management**          | ✅ **Functional**       | `InventoryView` provides a live stock summary, stock movement history, and filtering capabilities. Stock adjustments are fully functional. |
 | **Purchase Orders & Stock-ins**   | ✅ **Functional**       | Creation of Purchase Orders and receiving of items (full or partial) against a PO are fully implemented and update stock levels correctly. |
-| **Reporting & Analytics**         | ✅ **Functional**       | Backend correctly generates data for all reports. The UI displays reports and allows for PDF/CSV export.                             |
-| **Automated Testing**             | ✅ **Foundational**     | A comprehensive unit test suite now covers all business logic managers and key services, running against an isolated in-memory database. |
+| **Reporting & Analytics**         | ✅ **Functional**       | The backend `ReportingManager` and `GstManager` correctly generate data for all implemented reports (Sales, GST, Inventory Valuation). |
+| **Report Exporting**              | ✅ **Functional**       | All generated reports can be exported to professional-looking PDF files and relevant data tables can be exported to CSV.             |
+| **Company Information**           | ✅ **Functional**       | The `SettingsView` now allows for viewing and saving all company-level information, such as name, address, and registration numbers. |
 
 ---
 
@@ -101,7 +99,7 @@ Our architecture strictly separates the application into four logical layers, en
 
 ### Module Interaction Flowchart
 
-The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them. The following diagram illustrates the flow for finalizing a sale.
+The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them. The following diagram illustrates the flow for the most complex operation: finalizing a sale.
 
 ```mermaid
 graph TD
@@ -153,42 +151,30 @@ A well-organized file structure is paramount for navigating and maintaining a co
 ```
 sg-pos-system/
 │
-├── .env.example
-├── .gitignore
-├── alembic.ini
-├── docker-compose.dev.yml
-├── pyproject.toml
+├── .env.example              # Template for environment variables
+├── .gitignore                # Specifies intentionally untracked files to ignore
+├── alembic.ini               # Configuration file for Alembic database migrations
+├── docker-compose.dev.yml    # Docker Compose file for setting up the local dev database
+├── pyproject.toml            # Central project definition file (dependencies, tools, metadata)
 │
-├── app/
+├── app/                      # Root directory for all application source code
 │   ├── __init__.py
-│   ├── main.py
+│   ├── main.py               # Main application entry point
 │   │
-│   ├── core/
-│   ├── business_logic/
-│   │   ├── dto/
-│   │   └── managers/
-│   ├── models/
-│   ├── services/
-│   └── ui/
-│       ├── dialogs/
-│       ├── resources/
-│       ├── views/
-│       └── widgets/
+│   ├── core/                 # The architectural backbone of the application
+│   ├── business_logic/       # Business Logic Layer: The "brains" of the app
+│   ├── models/               # Persistence Layer: SQLAlchemy ORM models
+│   ├── services/             # Data Access Layer (Repository Pattern)
+│   └── ui/                   # Presentation Layer: All GUI components (PySide6)
 │
-├── migrations/
+├── migrations/               # Stores Alembic-generated database migration scripts
 │
 ├── scripts/
 │   └── database/
-│       ├── schema.sql
-│       └── seed_data.py
+│       ├── schema.sql          # The complete, hand-written SQL schema (source of truth)
+│       └── seed_data.py        # Script for populating the database with initial data
 │
-└── tests/
-    ├── __init__.py
-    ├── conftest.py
-    ├── factories.py
-    └── unit/
-        ├── business_logic/
-        └── services/
+└── tests/                    # Contains all unit, integration, and UI tests
 ```
 
 ### Key File & Directory Descriptions
@@ -204,9 +190,9 @@ sg-pos-system/
 | `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic.         |
 | `app/business_logic/managers/`   | **Business Logic Layer.** Orchestrates workflows, enforces business rules, and makes decisions.        |
 | `app/business_logic/dto/`        | **Data Contracts.** Pydantic models that define the structure of data passed between layers.           |
-| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, Dashboard, and settings panels. |
-| `app/ui/widgets/`                | **Reusable Components.** Contains custom widgets like `ManagedTableView` and `KpiWidget` to ensure a consistent UI. |
-| `tests/`                         | **Automated Tests.** The complete unit test suite. `conftest.py` configures the test environment. |
+| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the POS screen, inventory, and settings panels. |
+| `app/ui/dialogs/`                | **Interactive Dialogs.** Contains dialog windows for specific operations like making a payment or receiving PO items. |
+| `scripts/database/seed_data.py`  | **Initial Data.** A crucial script to populate a fresh database with the necessary default company, user, and outlet. |
 
 ---
 
@@ -221,10 +207,11 @@ This project uses a modern, professional-grade technology stack chosen for perfo
 | **Database**      | PostgreSQL 16+                                     | Unmatched reliability, scalability, and feature set for handling critical business and financial data.      |
 | **ORM**           | SQLAlchemy 2.0                                     | Industry-leading Object-Relational Mapper with powerful features and excellent async support.               |
 | **DB Migrations** | Alembic                                            | The standard for managing database schema changes with SQLAlchemy.                                          |
-| **Async**         | `asyncio`, `greenlet`                              | Python's native concurrency library, augmented with `greenlet` for seamless SQLAlchemy async operations.     |
-| **Testing**       | `pytest`, `pytest-asyncio`, `aiosqlite`            | A powerful and flexible testing ecosystem for testing all aspects of the application against an in-memory DB. |
+| **Async**         | `asyncio`                                          | Python's native library for writing concurrent code, essential for a responsive application.                |
+| **Testing**       | `pytest`, `pytest-qt`, `pytest-asyncio`            | A powerful and flexible testing ecosystem that covers all aspects of our application (core, UI, async).      |
 | **Packaging**     | Poetry                                             | Modern, reliable dependency management and packaging that guarantees reproducible environments.             |
 | **Code Quality**  | Black (Formatter), Ruff (Linter), MyPy (Type Checker)| A trifecta of tools to enforce code style, catch bugs early, and ensure long-term maintainability.          |
+| **PDF/CSV Export**| `reportlab`, `openpyxl`                            | Proven libraries for generating professional documents and spreadsheet-compatible files.                      |
 
 ---
 
@@ -260,7 +247,7 @@ This guide provides step-by-step instructions to set up a complete local develop
     ```
 
 4.  **Install Project Dependencies**
-    This command reads the `pyproject.toml` file, creates a dedicated virtual environment, and installs all production and development packages (like `pytest` and `aiosqlite`).
+    This command reads the `pyproject.toml` file, creates a dedicated virtual environment, and installs all required packages.
     ```bash
     poetry install
     ```
@@ -272,13 +259,13 @@ This guide provides step-by-step instructions to set up a complete local develop
     ```
 
 6.  **Apply Database Migrations**
-    This command connects to the running PostgreSQL database and creates all the necessary tables within the `sgpos` schema.
+    This command connects to the running database and creates all the necessary tables, indexes, and constraints according to the migration scripts.
     ```bash
     alembic upgrade head
     ```
 
 7.  **Seed Initial Data (Crucial First-Time Step)**
-    This script populates the fresh database with the default company, admin user, roles, and outlet needed to run the application.
+    This script populates the fresh database with the default company, admin user, roles, and outlet needed to run the application. Without this step, you will not be able to log in or use the application.
     ```bash
     python scripts/database/seed_data.py
     ```
@@ -289,47 +276,50 @@ This guide provides step-by-step instructions to set up a complete local develop
     python app/main.py
     ```
 
-## 7. Running the Test Suite
-A key feature of this codebase is its comprehensive and reliable test suite.
+---
 
-- **Run all tests:** To ensure the entire application logic is sound, run the following command from the project root (inside the `poetry shell`):
-  ```bash
-  pytest
-  ```
-- **Check Test Coverage:** To see which parts of the application are covered by tests, generate an HTML report:
-  ```bash
-  pytest --cov=app --cov-report=html
-  # Then open the generated htmlcov/index.html in your browser.
-  ```
-
-## **8. User Guide: Running the Application**
+## **7. User Guide: Running the Application**
 
 Once the application is running, here is a brief guide on how to use its core features:
 
-*   **Navigation:** Use the menu bar at the top of the window (`Dashboard`, `POS`, `Data Management`, etc.) to switch between the different sections.
-*   **Dashboard:** The Dashboard view is now available and provides a live look at today's sales, transaction counts, and other key metrics. It automatically refreshes each time you view it.
+*   **Navigation:** Use the menu bar at the top of the window (`File`, `POS`, `Data Management`, etc.) to switch between the different sections. The application uses lazy loading, so views are only created the first time you navigate to them, ensuring fast startup.
+
 *   **Making a Sale:**
-    1.  Navigate to `POS > Sales Screen`.
-    2.  Find an item by its SKU or name and click **"Add to Cart"**.
-    3.  Click the green **"PAY"** button, enter payment details, and click **"Finalize Sale"**.
-*   **Managing Data (Products, Customers, etc.):**
-    1.  Navigate to a management screen like `Data Management > Products`.
-    2.  The view will show a "Loading..." message and then display the data. If no data exists, it will show an informative "No products found" message.
-    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records.
-*   **Settings:**
-    1.  Navigate to `Settings > Application Settings`.
-    2.  Here you can manage Company Information, Users, and the newly implemented Payment Methods.
+    1.  In the default **POS** screen, find an item by its SKU or name using the "Product" search bar.
+    2.  Click **"Add to Cart"**. The item appears on the left. You can double-click the quantity in the cart to edit it.
+    3.  When ready, click the green **"PAY"** button.
+    4.  In the **Payment Dialog**, add one or more payment methods until the balance is zero or positive.
+    5.  Click **"Finalize Sale"** to complete the transaction.
 
-## **9. Project Roadmap**
+*   **Managing Data (Products, Customers):**
+    1.  Navigate to `Data Management > Products` or `Data Management > Customers`.
+    2.  The view will display a list of all items. Use the search bar at the top for live, responsive filtering.
+    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records. You can also double-click a row to edit it.
 
-With the core features and UI/UX baseline established, the project is well-positioned for future growth.
+*   **Managing Inventory:**
+    1.  Navigate to `Inventory > Stock Management`.
+    2.  Click the **"Purchase Orders"** tab to view existing POs or create a new one.
+    3.  To receive stock, select a PO with status "Sent" or "Partially Received" and click **"Receive Items on PO"**.
+    4.  Click the **"Current Stock"** tab and use the **"Adjust Stock"** button to perform manual stock takes or adjustments for wastage.
+    5.  Double-click any item in the "Current Stock" list to jump to its detailed **"Stock Movements"** history.
+
+*   **Reporting:**
+    1.  Navigate to `Reports > Business Reports`.
+    2.  Select a report type and date range, then click **"Generate Report"**.
+    3.  Once the report is displayed, use the **"Export PDF"** or **"Export CSV"** buttons to save it to your computer.
+
+---
+
+## **8. Project Roadmap**
+
+With the core features now stable and functional, the project can focus on enhancements and new modules.
 
 ### Immediate Next Steps (v1.1)
 
-*   **Expand Test Coverage:** Continue to build out the test suite, focusing on the data access (service) layer and adding basic UI tests with `pytest-qt`.
+*   **Comprehensive Test Suite:** Implement a full suite of unit and integration tests using `pytest` to ensure long-term stability and prevent regressions. This is the highest priority for the next release.
+*   **Dashboard View:** Create a main dashboard view that displays key performance indicators (KPIs) like daily sales, top products, and low stock alerts.
+*   **UI/UX Refinements:** Enhance the user experience by adding "empty state" messages to tables (e.g., "No products found"), visual loading indicators for long operations, and a global status bar.
 *   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing).
-*   **Global Status Bar:** Add a status bar to the `MainWindow` to provide non-intrusive feedback for operations like saving data or connection status.
-*   **Refine Dashboard:** Add more KPIs and simple charts (e.g., a bar chart for weekly sales) to the dashboard.
 
 ### Long-Term Vision (v2.0+)
 
@@ -340,12 +330,12 @@ With the core features and UI/UX baseline established, the project is well-posit
 
 ---
 
-## **10. How to Contribute**
+## **9. How to Contribute**
 
 We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued. Please see the [`CONTRIBUTING.md`](CONTRIBUTING.md) file for detailed guidelines on our development process and how to submit a pull request. All participants are expected to adhere to our [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ---
 
-## **11. License**
+## **10. License**
 
 This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.

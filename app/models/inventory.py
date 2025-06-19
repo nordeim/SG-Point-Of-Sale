@@ -11,9 +11,9 @@ from app.models.base import Base, TimestampMixin
 class Inventory(Base, TimestampMixin):
     __tablename__ = "inventory"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="RESTRICT"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="RESTRICT"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id", ondelete="RESTRICT"), nullable=True, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id", ondelete="RESTRICT"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="RESTRICT"), nullable=True, index=True)
     quantity_on_hand = Column(Numeric(15, 4), nullable=False, default=0)
     outlet = relationship("Outlet", back_populates="inventory_items")
     product = relationship("Product", back_populates="inventory_items")
@@ -23,16 +23,16 @@ class Inventory(Base, TimestampMixin):
 class StockMovement(Base):
     __tablename__ = "stock_movements"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
     movement_type = Column(String(50), nullable=False)
     quantity_change = Column(Numeric(15, 4), nullable=False)
     reference_id = Column(UUID(as_uuid=True))
-    reference_type = Column(String(50)) # Added reference_type from schema
+    reference_type = Column(String(50))
     notes = Column(Text)
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=True, index=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     company = relationship("Company", back_populates="stock_movements")
     outlet = relationship("Outlet", back_populates="stock_movements")
@@ -44,9 +44,9 @@ class StockMovement(Base):
 class PurchaseOrder(Base, TimestampMixin):
     __tablename__ = "purchase_orders"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False, index=True)
     po_number = Column(String(50), nullable=False)
     order_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     expected_delivery_date = Column(DateTime(timezone=True))
@@ -61,9 +61,9 @@ class PurchaseOrder(Base, TimestampMixin):
 class PurchaseOrderItem(Base, TimestampMixin):
     __tablename__ = "purchase_order_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    purchase_order_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
+    purchase_order_id = Column(UUID(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
     quantity_ordered = Column(Numeric(15, 4), nullable=False)
     quantity_received = Column(Numeric(15, 4), nullable=False, default=0)
     unit_cost = Column(Numeric(19, 4), nullable=False)
