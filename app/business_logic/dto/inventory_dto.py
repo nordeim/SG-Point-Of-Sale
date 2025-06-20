@@ -5,6 +5,24 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+from enum import Enum
+
+class StockMovementType(str, Enum):
+    SALE = "SALE"
+    RETURN = "RETURN"
+    PURCHASE = "PURCHASE"
+    ADJUSTMENT_IN = "ADJUSTMENT_IN"
+    ADJUSTMENT_OUT = "ADJUSTMENT_OUT"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+
+class PurchaseOrderStatus(str, Enum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
+    RECEIVED = "RECEIVED"
+    CANCELLED = "CANCELLED"
+
 
 # --- Supplier DTOs ---
 class SupplierBaseDTO(BaseModel):
@@ -80,7 +98,7 @@ class StockAdjustmentDTO(BaseModel):
     outlet_id: uuid.UUID
     user_id: uuid.UUID
     notes: str = Field(..., min_length=1, description="Reason or notes for the adjustment")
-    items: List[StockAdjustmentItemDTO] = Field(..., min_length=1)
+    items: List[StockAdjustmentItemDTO] = Field(..., min_items=1)
 
 # --- Stock Movement DTO (for display/reporting) ---
 class StockMovementDTO(BaseModel):
@@ -104,8 +122,9 @@ class InventorySummaryDTO(BaseModel):
     variant_id: Optional[uuid.UUID] = None
     product_name: str
     sku: str
-    barcode: Optional[str]
-    category_name: Optional[str]
+    barcode: Optional[str] = None
+    # FIX: Field is now truly optional with a default value
+    category_name: Optional[str] = None
     quantity_on_hand: Decimal = Field(..., decimal_places=4)
     reorder_point: int
     is_active: bool

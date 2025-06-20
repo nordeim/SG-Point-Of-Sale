@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, TimestampMixin
+from app.business_logic.dto.sales_dto import SalesTransactionStatus
 
 class SalesTransaction(Base, TimestampMixin):
     __tablename__ = "sales_transactions"
@@ -37,7 +38,8 @@ class SalesTransaction(Base, TimestampMixin):
         back_populates="sales_transaction",
         viewonly=True
     )
-    __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint("status IN ('COMPLETED', 'VOIDED', 'HELD')", name="chk_sales_transaction_status"))
+    # FIX: Corrected f-string syntax for CHECK constraint
+    __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint(f"status IN ({', '.join(f"'{member.value}'" for member in SalesTransactionStatus)})", name="chk_sales_transaction_status"))
 
 class SalesTransactionItem(Base):
     __tablename__ = "sales_transaction_items"

@@ -13,6 +13,7 @@ from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.sales_dto import SaleCreateDTO, FinalizedSaleDTO, SalesTransactionItemDTO
 from app.models.sales import SalesTransaction, SalesTransactionItem, Payment
 from app.models.inventory import StockMovement
+from app.models.product import Product
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -79,7 +80,9 @@ class SalesManager(BaseManager):
                 "unit_price": unit_price,
                 "cost_price": product.cost_price,
                 "line_total": line_subtotal,
-                "gst_rate": product.gst_rate
+                "gst_rate": product.gst_rate,
+                # FIX: Propagate the full product object for subsequent steps like inventory deduction.
+                "product": product
             })
 
         total_amount = subtotal + tax_amount
@@ -99,43 +102,43 @@ class SalesManager(BaseManager):
         Returns:
             A Success with a FinalizedSaleDTO, or a Failure with an error message.
         """
-        # --- 1. Pre-computation & Validation Phase (before database transaction) ---
-        total_payment = sum(p.amount for p in dto.payments).quantize(Decimal("0.01"))
-        
-        # Fetch all product details in one go for efficiency
-        product_ids = [item.product_id for item in dto.cart_items]
-        fetched_products_result = await self.product_service.get_by_ids(product_ids)
-        if isinstance(fetched_products_result, Failure):
-            return fetched_products_result
-        
-        products_map = {p.id: p for p in fetched_products_result.value}
-        if len(products_map) != len(product_ids):
-            return Failure("One or more products in the cart could not be found.")
-
-        # Prepare detailed cart items for calculation
-        detailed_cart_items = []
-        for item_dto in dto.cart_items:
-            detailed_cart_items.append({
-                "product": products_map[item_dto.product_id],
-                "quantity": item_dto.quantity,
-                "unit_price_override": item_dto.unit_price_override,
-                "variant_id": item_dto.variant_id
-            })
-
-        totals_result = await self._calculate_totals(detailed_cart_items)
-        if isinstance(totals_result, Failure):
-            return totals_result
-        
-        calculated_totals = totals_result.value
-        total_amount_due = calculated_totals["total_amount"]
-
-        if total_payment < total_amount_due:
-            return Failure(f"Payment amount (S${total_payment:.2f}) is less than the total amount due (S${total_amount_due:.2f}).")
-
-        change_due = (total_payment - total_amount_due).quantize(Decimal("0.01"))
-        
-        # --- 2. Orchestration within a single atomic transaction ---
         try:
+            # --- 1. Pre-computation & Validation Phase (before database transaction) ---
+            total_payment = sum(p.amount for p in dto.payments).quantize(Decimal("0.01"))
+            
+            # Fetch all product details in one go for efficiency
+            product_ids = [item.product_id for item in dto.cart_items]
+            fetched_products_result = await self.product_service.get_by_ids(product_ids)
+            if isinstance(fetched_products_result, Failure):
+                return fetched_products_result
+            
+            products_map = {p.id: p for p in fetched_products_result.value}
+            if len(products_map) != len(product_ids):
+                return Failure("One or more products in the cart could not be found.")
+
+            # Prepare detailed cart items for calculation
+            detailed_cart_items = []
+            for item_dto in dto.cart_items:
+                detailed_cart_items.append({
+                    "product": products_map[item_dto.product_id],
+                    "quantity": item_dto.quantity,
+                    "unit_price_override": item_dto.unit_price_override,
+                    "variant_id": item_dto.variant_id
+                })
+
+            totals_result = await self._calculate_totals(detailed_cart_items)
+            if isinstance(totals_result, Failure):
+                return totals_result
+            
+            calculated_totals = totals_result.value
+            total_amount_due = calculated_totals["total_amount"]
+
+            if total_payment < total_amount_due:
+                return Failure(f"Payment amount (S${total_payment:.2f}) is less than the total amount due (S${total_amount_due:.2f}).")
+
+            change_due = (total_payment - total_amount_due).quantize(Decimal("0.01"))
+            
+            # --- 2. Orchestration within a single atomic transaction ---
             async with self.core.get_session() as session:
                 # 2a. Deduct inventory and get stock movement objects
                 inventory_deduction_result = await self.inventory_manager.deduct_stock_for_sale(
@@ -152,7 +155,7 @@ class SalesManager(BaseManager):
                     company_id=dto.company_id, outlet_id=dto.outlet_id, cashier_id=dto.cashier_id,
                     customer_id=dto.customer_id, transaction_number=transaction_number,
                     subtotal=calculated_totals["subtotal"], tax_amount=calculated_totals["tax_amount"],
-                    total_amount=total_amount_due, notes=dto.notes
+                    total_amount=total_amount_due, notes=dto.notes, status="COMPLETED"
                 )
                 
                 # 2c. Construct line items and payments
@@ -172,7 +175,7 @@ class SalesManager(BaseManager):
                 
                 # 2f. Update loyalty points if applicable
                 if dto.customer_id:
-                    loyalty_result = await self.customer_manager.add_loyalty_points_for_sale(dto.customer_id, saved_sale.total_amount)
+                    loyalty_result = await self.customer_manager.add_loyalty_points_for_sale(dto.customer_id, saved_sale.total_amount, session)
                     if isinstance(loyalty_result, Failure):
                         print(f"WARNING: Failed to update loyalty points for customer {dto.customer_id}: {loyalty_result.error}")
 
@@ -196,4 +199,5 @@ class SalesManager(BaseManager):
                 )
                 return Success(finalized_dto)
         except Exception as e:
+            # Capture the raw exception to understand the KeyError
             return Failure(f"A critical error occurred while finalizing the sale: {e}")

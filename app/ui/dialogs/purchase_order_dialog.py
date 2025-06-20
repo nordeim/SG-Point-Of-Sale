@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, Q
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTableView, QPushButton, QDialogButtonBox, QTextEdit, QMessageBox,
-    QComboBox, QDateEdit, QHeaderView, QMenu
+    QComboBox, QDateEdit, QHeaderView, QMenu, QLabel
 )
 
 from app.business_logic.dto.inventory_dto import PurchaseOrderCreateDTO, PurchaseOrderItemCreateDTO, SupplierDTO
@@ -18,6 +18,7 @@ from app.business_logic.dto.product_dto import ProductDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
+from app.ui.utils import format_error_for_user
 
 class POLineItem(QObject):
     """Helper class to hold and represent PO line item data for the TableModel."""
@@ -111,6 +112,7 @@ class PurchaseOrderDialog(QDialog):
         self.outlet_id = outlet_id
         self.setWindowTitle("Create New Purchase Order"); self.setMinimumSize(900, 700)
         self._setup_ui(); self._connect_signals(); self._load_initial_data()
+        self._on_form_data_changed() # Set initial button state
 
     def _setup_ui(self):
         self.supplier_combo = QComboBox(); self.expected_delivery_date_edit = QDateEdit(QDate.currentDate().addDays(7)); self.expected_delivery_date_edit.setCalendarPopup(True)
@@ -130,7 +132,8 @@ class PurchaseOrderDialog(QDialog):
         self.button_box.accepted.connect(self._on_submit_po); self.button_box.rejected.connect(self.reject)
         self.table_model.total_cost_changed.connect(self._update_total_cost_label)
         self.supplier_combo.currentIndexChanged.connect(self._on_form_data_changed)
-        self.table_model.data_changed_signal.connect(self._on_form_data_changed)
+        # Use a custom signal because we need to know when rows are added/removed, not just when data is edited
+        self.table_model.total_cost_changed.connect(self._on_form_data_changed)
         self.po_table.customContextMenuRequested.connect(self._on_table_context_menu)
 
     @Slot()
@@ -140,7 +143,9 @@ class PurchaseOrderDialog(QDialog):
 
     def _load_initial_data(self):
         def _on_done(r, e):
-            if e or isinstance(r, Failure): QMessageBox.critical(self, "Load Error", f"Failed to load suppliers: {e or r.error}"); return
+            if e or isinstance(r, Failure): 
+                user_friendly_error = format_error_for_user(e or r)
+                QMessageBox.critical(self, "Load Error", f"Failed to load suppliers: {user_friendly_error}"); return
             if isinstance(r, Success):
                 self.supplier_combo.clear(); self.supplier_combo.addItem("-- Select Supplier --", userData=None)
                 for supplier in r.value: self.supplier_combo.addItem(supplier.name, userData=supplier.id)
@@ -151,7 +156,9 @@ class PurchaseOrderDialog(QDialog):
         search_term = self.product_search_input.text().strip()
         if not search_term: return
         def _on_done(r, e):
-            if e or isinstance(r, Failure): QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {e or r.error}"); return
+            if e or isinstance(r, Failure):
+                user_friendly_error = format_error_for_user(e or r)
+                QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {user_friendly_error}"); return
             if isinstance(r, Success) and r.value: self.table_model.add_item(POLineItem(r.value[0])); self.product_search_input.clear()
             else: QMessageBox.warning(self, "Not Found", f"No product found for '{search_term}'.")
         self.async_worker.run_task(self.core.product_manager.search_products(self.company_id, search_term, limit=1), _on_done)
@@ -168,7 +175,9 @@ class PurchaseOrderDialog(QDialog):
         self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
         def _on_done(r, e):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-            if e or isinstance(r, Failure): QMessageBox.critical(self, "Creation Failed", f"Could not create Purchase Order: {e or r.error}")
+            if e or isinstance(r, Failure):
+                user_friendly_error = format_error_for_user(e or r)
+                QMessageBox.critical(self, "Creation Failed", f"Could not create Purchase Order: {user_friendly_error}")
             elif isinstance(r, Success):
                 QMessageBox.information(self, "Success", f"Purchase Order '{r.value.po_number}' created successfully!"); self.po_operation_completed.emit(); self.accept()
         self.async_worker.run_task(self.core.inventory_manager.create_purchase_order(po_dto), _on_done)

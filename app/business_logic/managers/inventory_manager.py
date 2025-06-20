@@ -108,12 +108,11 @@ class InventoryManager(BaseManager):
                 new_po = PurchaseOrder(
                     company_id=dto.company_id, outlet_id=dto.outlet_id, supplier_id=dto.supplier_id, po_number=po_number,
                     order_date=dto.order_date, expected_delivery_date=dto.expected_delivery_date, notes=dto.notes,
-                    total_amount=po_total_amount.quantize(Decimal("0.01")), items=po_items
+                    total_amount=po_total_amount.quantize(Decimal("0.01")), items=po_items, status='SENT'
                 )
                 save_po_result = await self.purchase_order_service.create_full_purchase_order(new_po, session)
                 if isinstance(save_po_result, Failure): raise Exception(save_po_result.error)
 
-                # The PurchaseOrder model does not have the supplier name, so we must use the one we fetched
                 return await self._create_po_dto(save_po_result.value, supplier_result.value.name)
         except Exception as e:
             return Failure(f"Failed to create purchase order: {e}")
@@ -164,32 +163,33 @@ class InventoryManager(BaseManager):
     
     async def get_all_purchase_orders(self, company_id: UUID, outlet_id: Optional[UUID] = None) -> Result[List[PurchaseOrderDTO], str]:
         """Retrieves all purchase orders for a given company, optionally filtered by outlet."""
-        # FIX: Call the new, optimized service method instead of the generic one.
         po_results = await self.purchase_order_service.get_all_with_supplier(company_id, outlet_id)
         if isinstance(po_results, Failure):
             return po_results
 
         po_dtos: List[PurchaseOrderDTO] = []
         for po in po_results.value:
-            # FIX: The supplier object is now eager-loaded. No more N+1 query.
             supplier_name = po.supplier.name if po.supplier else "Unknown Supplier"
             po_dto_res = await self._create_po_dto(po, supplier_name)
             if isinstance(po_dto_res, Success):
                 po_dtos.append(po_dto_res.value)
         return Success(po_dtos)
         
+    async def get_stock_movements_for_product(self, company_id: UUID, product_id: UUID) -> Result[List[StockMovementDTO], str]:
+        """
+        Retrieves the movement history for a specific product.
+        """
+        result = await self.inventory_service.get_movements_for_product(company_id, product_id)
+        if isinstance(result, Failure):
+            return result
+        
+        # Convert raw dicts from the service into strongly-typed DTOs
+        return Success([StockMovementDTO(**row) for row in result.value])
+
     async def _create_po_dto(self, po: PurchaseOrder, supplier_name: str) -> Result[PurchaseOrderDTO, str]:
         """Helper to construct a PurchaseOrderDTO from an ORM object."""
-        # This helper must be fast as it can be called in a loop.
-        # Fetch all product details for all items in one query if possible.
-        # For now, we assume po.items is already loaded or we fetch them.
-        # If po.items isn't loaded, this would be another N+1, but the PO view doesn't show items yet.
-        # Let's assume for DTO creation, items might not be fully detailed yet unless needed.
-        # The `create_purchase_order` method already has `po.items` loaded.
-        # The `get_all_purchase_orders` does not yet load items, which is fine for the current PO list view.
-        
         items_dto: List[PurchaseOrderItemDTO] = []
-        if po.items: # Check if items are loaded
+        if po.items:
             product_ids = [item.product_id for item in po.items]
             products_res = await self.product_service.get_by_ids(product_ids)
             if isinstance(products_res, Failure): return products_res
@@ -197,7 +197,7 @@ class InventoryManager(BaseManager):
 
             for item in po.items:
                 product = products_map.get(item.product_id)
-                if not product: continue # Should not happen if data is consistent
+                if not product: continue
 
                 items_dto.append(
                     PurchaseOrderItemDTO(

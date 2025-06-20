@@ -6,7 +6,9 @@ import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
 from app.models.base import Base, TimestampMixin
+from app.business_logic.dto.inventory_dto import StockMovementType, PurchaseOrderStatus
 
 class Inventory(Base, TimestampMixin):
     __tablename__ = "inventory"
@@ -30,7 +32,7 @@ class StockMovement(Base):
     movement_type = Column(String(50), nullable=False)
     quantity_change = Column(Numeric(15, 4), nullable=False)
     reference_id = Column(UUID(as_uuid=True))
-    reference_type = Column(String(50))
+    reference_type = Column(String(50)) # Added reference_type from schema
     notes = Column(Text)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -39,7 +41,8 @@ class StockMovement(Base):
     product = relationship("Product", back_populates="stock_movements")
     variant = relationship("ProductVariant", back_populates="stock_movements")
     user = relationship("User", back_populates="stock_movements_created")
-    __table_args__ = (sa.CheckConstraint("movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')", name="chk_stock_movement_type"),)
+    # FIX: Corrected f-string syntax for CHECK constraint
+    __table_args__ = (sa.CheckConstraint(f"movement_type IN ({', '.join(f"'{member.value}'" for member in StockMovementType)})", name="chk_stock_movement_type"),)
 
 class PurchaseOrder(Base, TimestampMixin):
     __tablename__ = "purchase_orders"
@@ -56,7 +59,8 @@ class PurchaseOrder(Base, TimestampMixin):
     outlet = relationship("Outlet", back_populates="purchase_orders")
     supplier = relationship("Supplier", back_populates="purchase_orders")
     items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
-    __table_args__ = (sa.UniqueConstraint('company_id', 'po_number', name='uq_purchase_order_company_po_number'), sa.CheckConstraint("status IN ('DRAFT', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')", name="chk_purchase_order_status"))
+    # FIX: Corrected f-string syntax for CHECK constraint
+    __table_args__ = (sa.UniqueConstraint('company_id', 'po_number', name='uq_purchase_order_company_po_number'), sa.CheckConstraint(f"status IN ({', '.join(f"'{member.value}'" for member in PurchaseOrderStatus)})", name="chk_purchase_order_status"))
 
 class PurchaseOrderItem(Base, TimestampMixin):
     __tablename__ = "purchase_order_items"

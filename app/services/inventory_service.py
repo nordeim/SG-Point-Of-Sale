@@ -10,6 +10,8 @@ from sqlalchemy.future import select
 from app.core.result import Result, Success, Failure
 from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
+from app.models.user import User
+from app.models.company import Outlet # FIX: Import Outlet model for join
 from app.services.base_service import BaseService
 
 if TYPE_CHECKING:
@@ -113,3 +115,39 @@ class InventoryService(BaseService):
                 return Success([row._asdict() for row in result.all()])
         except Exception as e:
             return Failure(f"Database error getting inventory summary: {e}")
+
+    async def get_movements_for_product(self, company_id: UUID, product_id: UUID) -> Result[List[dict], str]:
+        """
+        Retrieves the movement history for a specific product, enriched with user and product details.
+        """
+        try:
+            async with self.core.get_session() as session:
+                # FIX: Use explicit JOINs instead of a text-based subquery for better reliability.
+                stmt = (
+                    select(
+                        StockMovement.id,
+                        StockMovement.product_id,
+                        StockMovement.variant_id,
+                        Product.name.label("product_name"),
+                        Product.sku,
+                        Outlet.name.label("outlet_name"),
+                        StockMovement.movement_type,
+                        StockMovement.quantity_change,
+                        StockMovement.reference_id,
+                        StockMovement.notes,
+                        User.full_name.label("created_by_user_name"),
+                        StockMovement.created_at
+                    )
+                    .join(Product, StockMovement.product_id == Product.id)
+                    .join(Outlet, StockMovement.outlet_id == Outlet.id)
+                    .outerjoin(User, StockMovement.created_by_user_id == User.id)
+                    .where(
+                        StockMovement.company_id == company_id,
+                        StockMovement.product_id == product_id
+                    )
+                    .order_by(StockMovement.created_at.desc())
+                )
+                result = await session.execute(stmt)
+                return Success([row._asdict() for row in result.all()])
+        except Exception as e:
+            return Failure(f"Database error getting stock movements for product: {e}")

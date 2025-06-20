@@ -21,7 +21,7 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTableView, QPushButton, QDialogButtonBox, QTextEdit, QMessageBox,
-    QHeaderView, QMenu
+    QHeaderView, QMenu, QLabel
 )
 
 from app.business_logic.dto.inventory_dto import StockAdjustmentDTO, StockAdjustmentItemDTO
@@ -29,6 +29,7 @@ from app.business_logic.dto.product_dto import ProductDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
+from app.ui.utils import format_error_for_user
 
 class AdjustmentLineItem(QObject):
     """Helper class to hold and represent adjustment line item data for the TableModel."""
@@ -55,7 +56,8 @@ class StockAdjustmentTableModel(QAbstractTableModel):
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._items: List[AdjustmentLineItem] = []
-        self.data_changed_signal = Signal()
+        # FIX: The custom signal is removed as it's an incorrect pattern.
+        # The dialog will now connect to the model's built-in signals.
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int: return len(self._items)
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int: return len(self.HEADERS)
@@ -78,7 +80,6 @@ class StockAdjustmentTableModel(QAbstractTableModel):
             try:
                 self._items[i.row()].counted_qty = Decimal(v) if str(v).strip() else None
                 self.dataChanged.emit(i, self.createIndex(i.row(), self.columnCount() - 1))
-                self.data_changed_signal.emit()
                 return True
             except: return False
         return False
@@ -91,11 +92,9 @@ class StockAdjustmentTableModel(QAbstractTableModel):
             QMessageBox.information(self.parent(), "Duplicate Item", f"Product '{item.product.name}' is already in the list.")
             return
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount()); self._items.append(item); self.endInsertRows()
-        self.data_changed_signal.emit()
     def remove_item_at_row(self, r):
         if 0 <= r < len(self._items):
             self.beginRemoveRows(QModelIndex(), r, r); del self._items[r]; self.endRemoveRows()
-            self.data_changed_signal.emit()
     def get_adjustment_items(self): return [i.to_stock_adjustment_item_dto() for i in self._items if i.counted_qty is not None]
 
 class StockAdjustmentDialog(QDialog):
@@ -132,9 +131,14 @@ class StockAdjustmentDialog(QDialog):
         self.product_search_input.returnPressed.connect(self._on_add_product_clicked)
         self.button_box.accepted.connect(self._on_submit_adjustment_clicked)
         self.button_box.rejected.connect(self.reject)
-        self.table_model.data_changed_signal.connect(self._on_data_changed)
         self.notes_input.textChanged.connect(self._on_data_changed)
         self.adjustment_table.customContextMenuRequested.connect(self._on_table_context_menu)
+        
+        # FIX: Connect to the model's standard signals for a robust implementation.
+        self.table_model.dataChanged.connect(self._on_data_changed)
+        self.table_model.rowsInserted.connect(self._on_data_changed)
+        self.table_model.rowsRemoved.connect(self._on_data_changed)
+
 
     @Slot()
     def _on_data_changed(self):
@@ -145,13 +149,17 @@ class StockAdjustmentDialog(QDialog):
         search_term = self.product_search_input.text().strip()
         if not search_term: return
         def _on_product_search_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure): QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {error or result.error}"); return
+            if error or isinstance(result, Failure):
+                user_friendly_error = format_error_for_user(error or result)
+                QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {user_friendly_error}"); return
             if isinstance(result, Success):
                 products: List[ProductDTO] = result.value
                 if not products: QMessageBox.warning(self, "Not Found", f"No product found for '{search_term}'."); return
                 p = products[0]
                 def _on_stock_fetch_done(stock_res, stock_err):
-                    if stock_err or isinstance(stock_res, Failure): QMessageBox.critical(self, "Error", f"Failed to get stock level: {stock_err or stock_res.error}"); return
+                    if stock_err or isinstance(stock_res, Failure):
+                        user_friendly_error = format_error_for_user(stock_err or stock_res)
+                        QMessageBox.critical(self, "Error", f"Failed to get stock level: {user_friendly_error}"); return
                     if isinstance(stock_res, Success):
                         self.table_model.add_item(AdjustmentLineItem(p, stock_res.value))
                         self.product_search_input.clear(); self.product_search_input.setFocus()
@@ -165,7 +173,9 @@ class StockAdjustmentDialog(QDialog):
         self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
         def _on_done(r, e):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-            if e or isinstance(r, Failure): QMessageBox.critical(self, "Submission Failed", f"Could not submit adjustment: {e or r.error}")
+            if e or isinstance(r, Failure):
+                user_friendly_error = format_error_for_user(e or r)
+                QMessageBox.critical(self, "Submission Failed", f"Could not submit adjustment: {user_friendly_error}")
             elif isinstance(r, Success):
                 QMessageBox.information(self, "Success", "Stock adjustment submitted successfully."); self.operation_completed.emit(); self.accept()
         self.async_worker.run_task(self.core.inventory_manager.adjust_stock(dto), _on_done)

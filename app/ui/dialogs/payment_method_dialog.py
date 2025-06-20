@@ -8,13 +8,16 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
     QCheckBox, QDialogButtonBox, QMessageBox, QComboBox
 )
-from PySide6.QtCore import Slot, Signal, QObject
+# FIX: Import the 'Qt' namespace to resolve the NameError
+from PySide6.QtCore import Slot, Signal, QObject, Qt
 
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.business_logic.dto.payment_dto import (
     PaymentMethodCreateDTO, PaymentMethodUpdateDTO, PaymentMethodDTO, PaymentMethodType
 )
+# FIX: Import the centralized error formatting utility
+from app.ui.utils import format_error_for_user
 
 class PaymentMethodDialog(QDialog):
     """A dialog for creating or editing a payment method."""
@@ -107,7 +110,9 @@ class PaymentMethodDialog(QDialog):
         def on_done(result: Any, error: Optional[Exception]):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
             if error or isinstance(result, Failure):
-                QMessageBox.critical(self, "Operation Failed", f"Could not save payment method:\n{error or result.error}")
+                # FIX: Use centralized error formatter for user-friendly messages
+                user_friendly_error = format_error_for_user(error or result)
+                QMessageBox.critical(self, "Operation Failed", f"Could not save payment method:\n{user_friendly_error}")
             elif isinstance(result, Success):
                 QMessageBox.information(self, "Success", success_msg)
                 self.operation_completed.emit()

@@ -1,9 +1,10 @@
 # File: app/business_logic/managers/customer_manager.py
 """Business Logic Manager for Customer operations."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional, AsyncIterator
 from uuid import UUID
 from decimal import Decimal
+from contextlib import asynccontextmanager
 
 from app.core.result import Result, Success, Failure
 from app.business_logic.managers.base_manager import BaseManager
@@ -13,6 +14,7 @@ from app.models.customer import Customer # Import the ORM model
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
     from app.services.customer_service import CustomerService
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 class CustomerManager(BaseManager):
     """Orchestrates business logic for customers."""
@@ -27,14 +29,12 @@ class CustomerManager(BaseManager):
         Creates a new customer.
         Business rule: Customer code and email must be unique for the company.
         """
-        # Business rule: Check for duplicate customer code
         existing_result = await self.customer_service.get_by_code(company_id, dto.customer_code)
         if isinstance(existing_result, Failure):
-            return existing_result # Propagate database error
+            return existing_result
         if existing_result.value is not None:
             return Failure(f"Business Rule Error: Customer with code '{dto.customer_code}' already exists.")
 
-        # Business rule: If email is provided, check for duplicate email
         if dto.email:
             email_check_result = await self.customer_service.get_by_email(company_id, dto.email)
             if isinstance(email_check_result, Failure):
@@ -128,32 +128,38 @@ class CustomerManager(BaseManager):
         
         return Success(True)
 
-    async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal) -> Result[int, str]:
+    async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal, session: Optional["AsyncSession"] = None) -> Result[int, str]:
         """
         Calculates and adds loyalty points for a completed sale.
-        Business Rule: 1 point for every S$10 spent (configurable in a future settings module).
+        This method is designed to be called from within an existing transaction (like a sale)
+        by passing the session, or as a standalone operation.
         """
         loyalty_rate = Decimal("10.00")
         points_to_add = int(sale_total // loyalty_rate)
         
         if points_to_add <= 0:
             return Success(0)
-
-        try:
-            async with self.core.get_session() as session:
-                customer_result = await self.customer_service.get_by_id(customer_id)
-                if isinstance(customer_result, Failure): return customer_result
-                
-                customer = customer_result.value
-                if not customer: return Failure(f"Customer with ID {customer_id} not found.")
+        
+        # FIX: Define the core logic in a separate async function.
+        async def _core_logic(update_session: "AsyncSession") -> Result[int, str]:
+            try:
+                # The service methods should ideally accept a session.
+                # As a workaround for now, we can use the session directly to get and update the object.
+                customer = await update_session.get(Customer, customer_id)
+                if not customer:
+                    return Failure(f"Customer with ID {customer_id} not found.")
                 
                 customer.loyalty_points += points_to_add
-                
-                update_result = await self.customer_service.update(customer)
-                if isinstance(update_result, Failure): return update_result
-                    
-                # TODO: Log the loyalty transaction for auditing
                 return Success(customer.loyalty_points)
-        except Exception as e:
-            print(f"ERROR: Failed to add loyalty points for customer {customer_id}: {e}")
-            return Failure(f"Failed to add loyalty points: {e}")
+            except Exception as e:
+                return Failure(f"Failed to add loyalty points: {e}")
+
+        # FIX: Use the provided session if it exists, otherwise create a new one.
+        if session:
+            return await _core_logic(session)
+        else:
+            try:
+                async with self.core.get_session() as new_session:
+                    return await _core_logic(new_session)
+            except Exception as e:
+                return Failure(f"Failed to add loyalty points in new session: {e}")

@@ -8,13 +8,15 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
     QCheckBox, QDialogButtonBox, QMessageBox, QComboBox, QListView
 )
-from PySide6.QtCore import Slot, Signal, QObject
+# FIX: Import the 'Qt' namespace for enum access (e.g., Qt.Checked)
+from PySide6.QtCore import Slot, Signal, QObject, Qt
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 from app.business_logic.dto.user_dto import UserCreateDTO, UserUpdateDTO, UserDTO, RoleDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
+from app.ui.utils import format_error_for_user
 
 class UserDialog(QDialog):
     """A dialog for creating or editing a user and assigning roles."""
@@ -80,26 +82,28 @@ class UserDialog(QDialog):
         """Loads available roles and populates the roles view."""
         def _on_done(result: Any, error: Optional[Exception]):
             if error or isinstance(result, Failure):
-                QMessageBox.critical(self, "Error", f"Failed to load roles: {error or result.error}")
+                user_friendly_error = format_error_for_user(error or result)
+                QMessageBox.critical(self, "Error", f"Failed to load roles: {user_friendly_error}")
                 return
             
-            self.available_roles = result.value
-            self.roles_model.clear()
-            for role in self.available_roles:
-                item = QStandardItem(role.name)
-                item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-                item.setData(role.id, Qt.UserRole)
-                item.setCheckState(Qt.Unchecked)
-                self.roles_model.appendRow(item)
-            
-            # If in edit mode, check the roles the user already has
-            if self.is_edit_mode and self.user:
-                user_role_ids = {role.id for role in self.user.roles}
-                for i in range(self.roles_model.rowCount()):
-                    item = self.roles_model.item(i)
-                    role_id = item.data(Qt.UserRole)
-                    if role_id in user_role_ids:
-                        item.setCheckState(Qt.Checked)
+            if isinstance(result, Success):
+                self.available_roles = result.value
+                self.roles_model.clear()
+                for role in self.available_roles:
+                    item = QStandardItem(role.name)
+                    item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                    item.setData(role.id, Qt.UserRole)
+                    item.setCheckState(Qt.Unchecked)
+                    self.roles_model.appendRow(item)
+                
+                # If in edit mode, check the roles the user already has
+                if self.is_edit_mode and self.user:
+                    user_role_ids = {role.id for role in self.user.roles}
+                    for i in range(self.roles_model.rowCount()):
+                        item = self.roles_model.item(i)
+                        role_id = item.data(Qt.UserRole)
+                        if role_id in user_role_ids:
+                            item.setCheckState(Qt.Checked)
 
         self.async_worker.run_task(self.core.user_manager.get_all_roles(self.core.current_company_id), _on_done)
 
@@ -155,9 +159,10 @@ class UserDialog(QDialog):
         def _on_done(result: Any, error: Optional[Exception]):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
             if error or isinstance(result, Failure):
-                QMessageBox.critical(self, "Error", f"Operation failed: {error or result.error}")
+                user_friendly_error = format_error_for_user(error or result)
+                QMessageBox.critical(self, "Error", f"Operation failed: {user_friendly_error}")
                 self.user_operation_completed.emit(False, str(error or result.error))
-            else:
+            elif isinstance(result, Success):
                 QMessageBox.information(self, "Success", "User saved successfully.")
                 self.user_operation_completed.emit(True, "Success")
                 self.accept()

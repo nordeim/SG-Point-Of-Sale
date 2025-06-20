@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableView,
     QMessageBox, QLineEdit, QHeaderView, QSizePolicy
 )
-from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject
+from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject, QTimer
 
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
@@ -80,6 +80,11 @@ class CustomerView(QWidget):
         self.core = core
         self.async_worker: AsyncWorker = core.async_worker
 
+        # REFACTOR: Add a timer for debouncing search input
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(350) # 350ms delay
+
         self._setup_ui()
         self._connect_signals()
         self._load_customers()
@@ -121,7 +126,11 @@ class CustomerView(QWidget):
         self.add_button.clicked.connect(self._on_add_customer)
         self.edit_button.clicked.connect(self._on_edit_customer)
         self.delete_button.clicked.connect(self._on_deactivate_customer)
-        self.search_input.textChanged.connect(self._on_search_customers)
+        
+        # REFACTOR: Connect search input to the timer for debouncing
+        self.search_input.textChanged.connect(self.search_timer.start)
+        self.search_timer.timeout.connect(self._trigger_search)
+        
         self.managed_table.table().doubleClicked.connect(self._on_edit_customer)
 
     def _get_selected_customer(self) -> Optional[CustomerDTO]:
@@ -131,6 +140,11 @@ class CustomerView(QWidget):
             row = selected_indexes[0].row()
             return self.customer_model.get_customer_at_row(row)
         return None
+
+    @Slot()
+    def _trigger_search(self):
+        """Slot that is called by the timer's timeout to initiate a search."""
+        self._load_customers(search_term=self.search_input.text())
 
     @Slot()
     def _load_customers(self, search_term: str = ""):
@@ -196,13 +210,6 @@ class CustomerView(QWidget):
         
         coro = self.core.customer_manager.deactivate_customer(selected_customer.id)
         self.async_worker.run_task(coro, on_done_callback=_on_done)
-
-    @Slot(str)
-    def _on_search_customers(self, text: str):
-        """Triggers customer search based on input text."""
-        # Note: A debounce timer like in ProductView could be added here for better performance on large datasets.
-        # For now, we load on every text change.
-        self._load_customers(search_term=text)
 
     @Slot(bool, str)
     def _handle_customer_dialog_result(self, success: bool, message: str):

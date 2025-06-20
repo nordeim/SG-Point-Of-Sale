@@ -5,6 +5,14 @@ from decimal import Decimal
 from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from enum import Enum
+
+# NEW: Centralized Enum for Sales Transaction Statuses
+class SalesTransactionStatus(str, Enum):
+    COMPLETED = "COMPLETED"
+    VOIDED = "VOIDED"
+    HELD = "HELD"
+
 
 class CartItemDTO(BaseModel):
     """DTO representing an item to be added to a sales transaction."""
@@ -25,8 +33,8 @@ class SaleCreateDTO(BaseModel):
     outlet_id: uuid.UUID
     cashier_id: uuid.UUID
     customer_id: Optional[uuid.UUID] = None
-    cart_items: List[CartItemDTO] = Field(..., min_length=1)
-    payments: List[PaymentInfoDTO] = Field(..., min_length=1)
+    cart_items: List[CartItemDTO] = Field(..., min_items=1)
+    payments: List[PaymentInfoDTO] = Field(..., min_items=1)
     notes: Optional[str] = None
 
 class SalesTransactionItemDTO(BaseModel):

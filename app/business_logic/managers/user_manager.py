@@ -10,6 +10,8 @@ from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.user_dto import UserDTO, UserCreateDTO, UserUpdateDTO, RoleDTO
 from app.models import User, Role, UserRole
 from sqlalchemy.orm import selectinload
+# FIX: Add missing 'select' import from sqlalchemy
+from sqlalchemy import select
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -42,12 +44,9 @@ class UserManager(BaseManager):
         try:
             async with self.core.get_session() as session:
                 session.add(new_user)
-                await session.flush()  # Ensures new_user.id is available
+                await session.flush()
 
-                # FIX: Implement role assignment logic
                 for role_id in dto.roles:
-                    # TODO: For multi-outlet scenarios, the DTO should specify the outlet.
-                    # For now, we assign the role for the currently active outlet.
                     user_role = UserRole(
                         user_id=new_user.id,
                         role_id=role_id,
@@ -65,7 +64,6 @@ class UserManager(BaseManager):
         """Updates an existing user's details, password, and roles."""
         async with self.core.get_session() as session:
             try:
-                # Use selectinload to fetch user with roles efficiently
                 stmt = select(User).where(User.id == user_id).options(selectinload(User.user_roles))
                 result = await session.execute(stmt)
                 user = result.scalar_one_or_none()
@@ -73,26 +71,31 @@ class UserManager(BaseManager):
                 if not user:
                     return Failure("User not found.")
 
-                # Update basic user fields
                 update_data = dto.dict(exclude_unset=True, exclude={'password', 'roles'})
                 for key, value in update_data.items():
                     setattr(user, key, value)
                 
-                # Update password if provided
                 if dto.password:
                     user.password_hash = self._hash_password(dto.password)
 
-                # Update roles: clear existing roles and add new ones
-                user.user_roles.clear()
-                await session.flush()
+                # FIX: More efficient and atomic role update logic
+                existing_role_map = {ur.role_id: ur for ur in user.user_roles}
+                target_role_ids = set(dto.roles)
+                
+                # Remove roles that are no longer assigned
+                roles_to_remove = [user_role for role_id, user_role in existing_role_map.items() if role_id not in target_role_ids]
+                for user_role in roles_to_remove:
+                    await session.delete(user_role)
 
-                for role_id in dto.roles:
-                    user_role = UserRole(
-                        user_id=user.id,
-                        role_id=role_id,
-                        outlet_id=self.core.current_outlet_id # Assumes update is for current context
-                    )
-                    session.add(user_role)
+                # Add new roles
+                for role_id in target_role_ids:
+                    if role_id not in existing_role_map:
+                        new_assignment = UserRole(
+                            user_id=user.id,
+                            role_id=role_id,
+                            outlet_id=self.core.current_outlet_id 
+                        )
+                        session.add(new_assignment)
                 
                 await session.flush()
                 await session.refresh(user, attribute_names=['user_roles'])

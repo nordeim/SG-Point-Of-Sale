@@ -14,6 +14,7 @@ from app.business_logic.dto.customer_dto import CustomerCreateDTO, CustomerUpdat
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
+from app.ui.utils import format_error_for_user # REFACTOR: Import utility
 
 class CustomerDialog(QDialog):
     """A dialog for creating or editing a customer."""
@@ -111,26 +112,25 @@ class CustomerDialog(QDialog):
             if self.is_edit_mode:
                 coro = self.core.customer_manager.update_customer(self.customer.id, dto)
                 success_msg = f"Customer '{dto.name}' updated successfully!"
-                error_prefix = "Failed to update customer:"
+                error_prefix = "Failed to update customer"
             else:
                 coro = self.core.customer_manager.create_customer(company_id, dto)
                 success_msg = f"Customer '{dto.name}' created successfully!"
-                error_prefix = "Failed to create customer:"
+                error_prefix = "Failed to create customer"
 
             self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
             
             def _on_done(result: Any, error: Optional[Exception]):
                 self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-                if error:
-                    QMessageBox.critical(self, "Error", f"{error_prefix}\n{error}")
-                    self.customer_operation_completed.emit(False, str(error))
+                # REFACTOR: Use centralized error formatter
+                if error or isinstance(result, Failure):
+                    user_friendly_error = format_error_for_user(error or result)
+                    QMessageBox.warning(self, "Operation Failed", f"{error_prefix}:\n{user_friendly_error}")
+                    self.customer_operation_completed.emit(False, str(error or result.error))
                 elif isinstance(result, Success):
                     QMessageBox.information(self, "Success", success_msg)
                     self.customer_operation_completed.emit(True, success_msg)
                     self.accept()
-                elif isinstance(result, Failure):
-                    QMessageBox.warning(self, "Validation Error", f"{error_prefix}\n{result.error}")
-                    self.customer_operation_completed.emit(False, result.error)
                 else:
                     QMessageBox.critical(self, "Internal Error", f"Unexpected result type from manager: {type(result)}")
                     self.customer_operation_completed.emit(False, "An unexpected internal error occurred.")
@@ -138,6 +138,8 @@ class CustomerDialog(QDialog):
             self.async_worker.run_task(coro, on_done_callback=_on_done)
 
         except Exception as e:
-            QMessageBox.critical(self, "Application Error", f"An internal error prevented the operation:\n{e}")
+            # REFACTOR: Use centralized error formatter
+            user_friendly_error = format_error_for_user(e)
+            QMessageBox.critical(self, "Application Error", f"An internal error prevented the operation:\n{user_friendly_error}")
             self.customer_operation_completed.emit(False, f"Internal error: {e}")
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
