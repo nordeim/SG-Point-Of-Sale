@@ -87,5 +87,8 @@ Awesome job so far! Arrange the recommended improvements and fixes identified in
 awesome plan! awesome job! please proceed with the next step in your plan meticulously and systematically.
 
 ---
+The changes made recently to address the "greenlet_spawn" error had been extensive and the files listed below had been affected by the refactoring effort. QA is deeply concerned about the possible regression bugs inadvertently introduced by the wide-ranging refactoring. QA want you do a very deep review of *all the changes made to the listed files* since the start of the last round of fixing the "unable to pay to complete a sale transaction" bug. Use a line by line comparison to compare the state of the files at the start of this round of change with the latest state of the files, then carefully review and validate (justify) the changes. Then create a detailed code change review report in markdown format to clearly and logically describe the natural of the issue (as understood), analysis performed and decisions made at each troubleshooting stage, with code snippets to illustrate the change and its justification. Use at least 6000 words for a comprehensive code review analysis report.
+
+---
 Still the same error: can't make payment to complete a transaction.
 
