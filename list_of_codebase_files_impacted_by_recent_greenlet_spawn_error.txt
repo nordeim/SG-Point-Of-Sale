@@ -1,0 +1,13 @@
+# list of codebase files modified in the recent refactoring exercise to fix the payment related "greenlet_spawn" error.
+app/business_logic/managers/customer_manager.py
+app/business_logic/managers/inventory_manager.py
+app/business_logic/managers/sales_manager.py
+app/services/base_service.py
+app/services/company_service.py
+app/services/customer_service.py
+app/services/inventory_service.py
+app/services/payment_service.py
+app/services/product_service.py
+app/services/purchase_order_service.py
+app/services/supplier_service.py
+app/services/user_service.py

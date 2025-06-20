@@ -26,6 +26,7 @@ app/ui/dialogs/__pycache__/product_dialog.cpython-312.pyc
 app/ui/dialogs/__pycache__/purchase_order_dialog.cpython-312.pyc
 app/ui/dialogs/payment_dialog.py
 app/ui/dialogs/user_dialog.py
+app/ui/utils.py
 app/ui/resources/styles.qss
 app/ui/resources/__init__.py
 app/ui/resources/icons/__init__.py
@@ -50,13 +51,13 @@ app/ui/views/payment_method_view.py
 app/ui/main_window.py
 app/ui/widgets/__init__.py
 app/ui/widgets/kpi_widget.py
-app/ui/widgets/searchable_table_view.py
 app/ui/widgets/managed_table_view.py
 app/ui/widgets/__pycache__/__init__.cpython-312.pyc
 app/ui/widgets/__pycache__/managed_table_view.cpython-312.pyc
 app/ui/widgets/__pycache__/kpi_widget.cpython-312.pyc
 app/ui/__pycache__/__init__.cpython-312.pyc
 app/ui/__pycache__/main_window.cpython-312.pyc
+app/ui/__pycache__/utils.cpython-312.pyc
 app/services/customer_service.py
 app/services/__init__.py
 app/services/inventory_service.py
@@ -71,7 +72,9 @@ app/services/product_service.py
 app/services/sales_service.py
 app/services/__pycache__/purchase_order_service.cpython-312.pyc
 app/services/__pycache__/customer_service.cpython-312.pyc
+app/services/__pycache__/sales_service.cpython-312.pyc
 app/services/__pycache__/__init__.cpython-312.pyc
+app/services/__pycache__/supplier_service.cpython-312.pyc
 app/services/__pycache__/product_service.cpython-312.pyc
 app/services/__pycache__/report_service.cpython-312.pyc
 app/services/__pycache__/company_service.cpython-312.pyc
@@ -126,6 +129,7 @@ app/business_logic/managers/__pycache__/__init__.cpython-312.pyc
 app/business_logic/managers/__pycache__/customer_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/reporting_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/inventory_manager.cpython-312.pyc
+app/business_logic/managers/__pycache__/sales_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/base_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/payment_manager.cpython-312.pyc
 app/business_logic/managers/__pycache__/user_manager.cpython-312.pyc
@@ -157,7 +161,6 @@ scripts/database/schema.sql
 migrations/script.py.mako
 migrations/versions/d5a6759ef2f7_initial_schema_setup.py
 migrations/versions/__pycache__/1a2b3c4d5e6f_update_check_constraint_on_journal_entry_lines.cpython-312.pyc
-migrations/versions/__pycache__/(new_revision_id)_update_check_constraint_on_journal_entry_lines.cpython-312.pyc
 migrations/versions/__pycache__/d5a6759ef2f7_initial_schema_setup.cpython-312.pyc
 migrations/__pycache__/env.cpython-312.pyc
 migrations/env.py

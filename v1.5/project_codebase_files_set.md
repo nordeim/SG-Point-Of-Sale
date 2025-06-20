@@ -32,11 +32,10 @@ PySide6 = "^6.9.0"         # The core Qt6 bindings for Python.
 SQLAlchemy = {version = "^2.0.30", extras = ["asyncio"]} # The industry-standard ORM, with asyncio support.
 alembic = "^1.13.1"        # For database schema migrations.
 asyncpg = "^0.29.0"        # High-performance asyncio driver for PostgreSQL.
-greenlet = "^3.0.3"        # Required for SQLAlchemy's async bridge.
 
 # Data Validation & Settings
 pydantic = "^2.7.1"        # For Data Transfer Objects (DTOs) and core validation.
-pydantic-settings = "^2.2.1" # Added for settings management with Pydantic v2.
+pydantic-settings = "^2.2.1" # FIX: Added for settings management with Pydantic v2.
 python-dotenv = "^1.0.0"   # For loading environment variables from .env files.
 
 # Security
@@ -57,8 +56,8 @@ qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g.,
 # These packages are only installed in development environments (`poetry install --with dev`).
 # This keeps the production installation lean and clean.
 [tool.poetry.group.dev.dependencies]
-psycopg2-binary = "^2.9.10" # Synchronous driver for Alembic
-aiosqlite = "^0.20.0"      # Async driver for SQLite test database
+# NEW: Add psycopg2-binary for Alembic's synchronous connection to PostgreSQL
+psycopg2-binary = "^2.9.10" # Or latest stable version
 
 # Testing Framework
 pytest = "^8.2.0"             # The primary testing framework.
@@ -455,7 +454,7 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTableView, QPushButton, QDialogButtonBox, QTextEdit, QMessageBox,
-    QHeaderView, QMenu, QLabel
+    QHeaderView, QMenu
 )
 
 from app.business_logic.dto.inventory_dto import StockAdjustmentDTO, StockAdjustmentItemDTO
@@ -463,7 +462,6 @@ from app.business_logic.dto.product_dto import ProductDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
-from app.ui.utils import format_error_for_user
 
 class AdjustmentLineItem(QObject):
     """Helper class to hold and represent adjustment line item data for the TableModel."""
@@ -490,8 +488,7 @@ class StockAdjustmentTableModel(QAbstractTableModel):
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._items: List[AdjustmentLineItem] = []
-        # FIX: The custom signal is removed as it's an incorrect pattern.
-        # The dialog will now connect to the model's built-in signals.
+        self.data_changed_signal = Signal()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int: return len(self._items)
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int: return len(self.HEADERS)
@@ -514,6 +511,7 @@ class StockAdjustmentTableModel(QAbstractTableModel):
             try:
                 self._items[i.row()].counted_qty = Decimal(v) if str(v).strip() else None
                 self.dataChanged.emit(i, self.createIndex(i.row(), self.columnCount() - 1))
+                self.data_changed_signal.emit()
                 return True
             except: return False
         return False
@@ -526,9 +524,11 @@ class StockAdjustmentTableModel(QAbstractTableModel):
             QMessageBox.information(self.parent(), "Duplicate Item", f"Product '{item.product.name}' is already in the list.")
             return
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount()); self._items.append(item); self.endInsertRows()
+        self.data_changed_signal.emit()
     def remove_item_at_row(self, r):
         if 0 <= r < len(self._items):
             self.beginRemoveRows(QModelIndex(), r, r); del self._items[r]; self.endRemoveRows()
+            self.data_changed_signal.emit()
     def get_adjustment_items(self): return [i.to_stock_adjustment_item_dto() for i in self._items if i.counted_qty is not None]
 
 class StockAdjustmentDialog(QDialog):
@@ -565,14 +565,9 @@ class StockAdjustmentDialog(QDialog):
         self.product_search_input.returnPressed.connect(self._on_add_product_clicked)
         self.button_box.accepted.connect(self._on_submit_adjustment_clicked)
         self.button_box.rejected.connect(self.reject)
+        self.table_model.data_changed_signal.connect(self._on_data_changed)
         self.notes_input.textChanged.connect(self._on_data_changed)
         self.adjustment_table.customContextMenuRequested.connect(self._on_table_context_menu)
-        
-        # FIX: Connect to the model's standard signals for a robust implementation.
-        self.table_model.dataChanged.connect(self._on_data_changed)
-        self.table_model.rowsInserted.connect(self._on_data_changed)
-        self.table_model.rowsRemoved.connect(self._on_data_changed)
-
 
     @Slot()
     def _on_data_changed(self):
@@ -583,17 +578,13 @@ class StockAdjustmentDialog(QDialog):
         search_term = self.product_search_input.text().strip()
         if not search_term: return
         def _on_product_search_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                user_friendly_error = format_error_for_user(error or result)
-                QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {user_friendly_error}"); return
+            if error or isinstance(result, Failure): QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {error or result.error}"); return
             if isinstance(result, Success):
                 products: List[ProductDTO] = result.value
                 if not products: QMessageBox.warning(self, "Not Found", f"No product found for '{search_term}'."); return
                 p = products[0]
                 def _on_stock_fetch_done(stock_res, stock_err):
-                    if stock_err or isinstance(stock_res, Failure):
-                        user_friendly_error = format_error_for_user(stock_err or stock_res)
-                        QMessageBox.critical(self, "Error", f"Failed to get stock level: {user_friendly_error}"); return
+                    if stock_err or isinstance(stock_res, Failure): QMessageBox.critical(self, "Error", f"Failed to get stock level: {stock_err or stock_res.error}"); return
                     if isinstance(stock_res, Success):
                         self.table_model.add_item(AdjustmentLineItem(p, stock_res.value))
                         self.product_search_input.clear(); self.product_search_input.setFocus()
@@ -607,9 +598,7 @@ class StockAdjustmentDialog(QDialog):
         self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
         def _on_done(r, e):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-            if e or isinstance(r, Failure):
-                user_friendly_error = format_error_for_user(e or r)
-                QMessageBox.critical(self, "Submission Failed", f"Could not submit adjustment: {user_friendly_error}")
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Submission Failed", f"Could not submit adjustment: {e or r.error}")
             elif isinstance(r, Success):
                 QMessageBox.information(self, "Success", "Stock adjustment submitted successfully."); self.operation_completed.emit(); self.accept()
         self.async_worker.run_task(self.core.inventory_manager.adjust_stock(dto), _on_done)
@@ -648,7 +637,6 @@ from app.business_logic.dto.customer_dto import CustomerCreateDTO, CustomerUpdat
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
-from app.ui.utils import format_error_for_user # REFACTOR: Import utility
 
 class CustomerDialog(QDialog):
     """A dialog for creating or editing a customer."""
@@ -746,25 +734,26 @@ class CustomerDialog(QDialog):
             if self.is_edit_mode:
                 coro = self.core.customer_manager.update_customer(self.customer.id, dto)
                 success_msg = f"Customer '{dto.name}' updated successfully!"
-                error_prefix = "Failed to update customer"
+                error_prefix = "Failed to update customer:"
             else:
                 coro = self.core.customer_manager.create_customer(company_id, dto)
                 success_msg = f"Customer '{dto.name}' created successfully!"
-                error_prefix = "Failed to create customer"
+                error_prefix = "Failed to create customer:"
 
             self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
             
             def _on_done(result: Any, error: Optional[Exception]):
                 self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-                # REFACTOR: Use centralized error formatter
-                if error or isinstance(result, Failure):
-                    user_friendly_error = format_error_for_user(error or result)
-                    QMessageBox.warning(self, "Operation Failed", f"{error_prefix}:\n{user_friendly_error}")
-                    self.customer_operation_completed.emit(False, str(error or result.error))
+                if error:
+                    QMessageBox.critical(self, "Error", f"{error_prefix}\n{error}")
+                    self.customer_operation_completed.emit(False, str(error))
                 elif isinstance(result, Success):
                     QMessageBox.information(self, "Success", success_msg)
                     self.customer_operation_completed.emit(True, success_msg)
                     self.accept()
+                elif isinstance(result, Failure):
+                    QMessageBox.warning(self, "Validation Error", f"{error_prefix}\n{result.error}")
+                    self.customer_operation_completed.emit(False, result.error)
                 else:
                     QMessageBox.critical(self, "Internal Error", f"Unexpected result type from manager: {type(result)}")
                     self.customer_operation_completed.emit(False, "An unexpected internal error occurred.")
@@ -772,9 +761,7 @@ class CustomerDialog(QDialog):
             self.async_worker.run_task(coro, on_done_callback=_on_done)
 
         except Exception as e:
-            # REFACTOR: Use centralized error formatter
-            user_friendly_error = format_error_for_user(e)
-            QMessageBox.critical(self, "Application Error", f"An internal error prevented the operation:\n{user_friendly_error}")
+            QMessageBox.critical(self, "Application Error", f"An internal error prevented the operation:\n{e}")
             self.customer_operation_completed.emit(False, f"Internal error: {e}")
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
 
@@ -1062,132 +1049,6 @@ class ProductDialog(QDialog):
 
 ```
 
-# app/ui/dialogs/payment_method_dialog.py
-```py
-# File: app/ui/dialogs/payment_method_dialog.py
-"""A QDialog for creating and editing PaymentMethod entities."""
-from __future__ import annotations
-from typing import Optional, Any
-import uuid
-
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit,
-    QCheckBox, QDialogButtonBox, QMessageBox, QComboBox
-)
-# FIX: Import the 'Qt' namespace to resolve the NameError
-from PySide6.QtCore import Slot, Signal, QObject, Qt
-
-from app.core.application_core import ApplicationCore
-from app.core.result import Success, Failure
-from app.business_logic.dto.payment_dto import (
-    PaymentMethodCreateDTO, PaymentMethodUpdateDTO, PaymentMethodDTO, PaymentMethodType
-)
-# FIX: Import the centralized error formatting utility
-from app.ui.utils import format_error_for_user
-
-class PaymentMethodDialog(QDialog):
-    """A dialog for creating or editing a payment method."""
-    operation_completed = Signal()
-
-    def __init__(self, core: ApplicationCore, method: Optional[PaymentMethodDTO] = None, parent: Optional[QObject] = None):
-        super().__init__(parent)
-        self.core = core
-        self.method = method
-        self.is_edit_mode = method is not None
-
-        self.setWindowTitle("Edit Payment Method" if self.is_edit_mode else "Add New Payment Method")
-        self.setMinimumWidth(400)
-
-        self._setup_ui()
-        self._connect_signals()
-
-        if self.is_edit_mode:
-            self._populate_form()
-
-    def _setup_ui(self):
-        """Initializes the UI widgets and layout."""
-        self.name_input = QLineEdit()
-        self.type_combo = QComboBox()
-        # Populate the combo box from the PaymentMethodType enum
-        for member in PaymentMethodType:
-            self.type_combo.addItem(member.name.replace('_', ' ').title(), member.value)
-        
-        self.is_active_checkbox = QCheckBox("Is Active")
-
-        form_layout = QFormLayout()
-        form_layout.addRow("Method Name:", self.name_input)
-        form_layout.addRow("Method Type:", self.type_combo)
-        form_layout.addRow(self.is_active_checkbox)
-        
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        self.button_box.button(QDialogButtonBox.Save).setText("Save Method")
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.addLayout(form_layout)
-        main_layout.addWidget(self.button_box)
-
-        if not self.is_edit_mode:
-            self.is_active_checkbox.setChecked(True)
-
-    def _connect_signals(self):
-        self.button_box.accepted.connect(self._on_save)
-        self.button_box.rejected.connect(self.reject)
-
-    def _populate_form(self):
-        """Populates the form fields with existing data in edit mode."""
-        if self.method:
-            self.name_input.setText(self.method.name)
-            self.is_active_checkbox.setChecked(self.method.is_active)
-            # Find the index in the combo box that matches the method's type
-            index = self.type_combo.findData(self.method.type)
-            if index >= 0:
-                self.type_combo.setCurrentIndex(index)
-
-    def _get_dto(self) -> PaymentMethodCreateDTO | PaymentMethodUpdateDTO:
-        """Constructs a DTO from the current form data."""
-        common_data = {
-            "name": self.name_input.text().strip(),
-            "type": self.type_combo.currentData(role=Qt.UserRole), # Get the enum value
-            "is_active": self.is_active_checkbox.isChecked(),
-        }
-        if self.is_edit_mode:
-            return PaymentMethodUpdateDTO(**common_data)
-        else:
-            return PaymentMethodCreateDTO(**common_data)
-
-    @Slot()
-    def _on_save(self):
-        """Handles the save action, triggering the async operation."""
-        if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Method name cannot be empty.")
-            return
-
-        dto = self._get_dto()
-        
-        if self.is_edit_mode:
-            coro = self.core.payment_method_manager.update_payment_method(self.method.id, dto)
-            success_msg = f"Payment method '{dto.name}' updated successfully!"
-        else:
-            coro = self.core.payment_method_manager.create_payment_method(self.core.current_company_id, dto)
-            success_msg = f"Payment method '{dto.name}' created successfully!"
-
-        self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
-        
-        def on_done(result: Any, error: Optional[Exception]):
-            self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-            if error or isinstance(result, Failure):
-                # FIX: Use centralized error formatter for user-friendly messages
-                user_friendly_error = format_error_for_user(error or result)
-                QMessageBox.critical(self, "Operation Failed", f"Could not save payment method:\n{user_friendly_error}")
-            elif isinstance(result, Success):
-                QMessageBox.information(self, "Success", success_msg)
-                self.operation_completed.emit()
-                self.accept()
-
-        self.core.async_worker.run_task(coro, on_done_callback=on_done)
-
-```
-
 # app/ui/dialogs/purchase_order_dialog.py
 ```py
 # File: app/ui/dialogs/purchase_order_dialog.py
@@ -1202,7 +1063,7 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, Q
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTableView, QPushButton, QDialogButtonBox, QTextEdit, QMessageBox,
-    QComboBox, QDateEdit, QHeaderView, QMenu, QLabel
+    QComboBox, QDateEdit, QHeaderView, QMenu
 )
 
 from app.business_logic.dto.inventory_dto import PurchaseOrderCreateDTO, PurchaseOrderItemCreateDTO, SupplierDTO
@@ -1210,7 +1071,6 @@ from app.business_logic.dto.product_dto import ProductDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
-from app.ui.utils import format_error_for_user
 
 class POLineItem(QObject):
     """Helper class to hold and represent PO line item data for the TableModel."""
@@ -1304,7 +1164,6 @@ class PurchaseOrderDialog(QDialog):
         self.outlet_id = outlet_id
         self.setWindowTitle("Create New Purchase Order"); self.setMinimumSize(900, 700)
         self._setup_ui(); self._connect_signals(); self._load_initial_data()
-        self._on_form_data_changed() # Set initial button state
 
     def _setup_ui(self):
         self.supplier_combo = QComboBox(); self.expected_delivery_date_edit = QDateEdit(QDate.currentDate().addDays(7)); self.expected_delivery_date_edit.setCalendarPopup(True)
@@ -1324,8 +1183,7 @@ class PurchaseOrderDialog(QDialog):
         self.button_box.accepted.connect(self._on_submit_po); self.button_box.rejected.connect(self.reject)
         self.table_model.total_cost_changed.connect(self._update_total_cost_label)
         self.supplier_combo.currentIndexChanged.connect(self._on_form_data_changed)
-        # Use a custom signal because we need to know when rows are added/removed, not just when data is edited
-        self.table_model.total_cost_changed.connect(self._on_form_data_changed)
+        self.table_model.data_changed_signal.connect(self._on_form_data_changed)
         self.po_table.customContextMenuRequested.connect(self._on_table_context_menu)
 
     @Slot()
@@ -1335,9 +1193,7 @@ class PurchaseOrderDialog(QDialog):
 
     def _load_initial_data(self):
         def _on_done(r, e):
-            if e or isinstance(r, Failure): 
-                user_friendly_error = format_error_for_user(e or r)
-                QMessageBox.critical(self, "Load Error", f"Failed to load suppliers: {user_friendly_error}"); return
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Load Error", f"Failed to load suppliers: {e or r.error}"); return
             if isinstance(r, Success):
                 self.supplier_combo.clear(); self.supplier_combo.addItem("-- Select Supplier --", userData=None)
                 for supplier in r.value: self.supplier_combo.addItem(supplier.name, userData=supplier.id)
@@ -1348,9 +1204,7 @@ class PurchaseOrderDialog(QDialog):
         search_term = self.product_search_input.text().strip()
         if not search_term: return
         def _on_done(r, e):
-            if e or isinstance(r, Failure):
-                user_friendly_error = format_error_for_user(e or r)
-                QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {user_friendly_error}"); return
+            if e or isinstance(r, Failure): QMessageBox.warning(self, "Product Lookup Failed", f"Could not find product: {e or r.error}"); return
             if isinstance(r, Success) and r.value: self.table_model.add_item(POLineItem(r.value[0])); self.product_search_input.clear()
             else: QMessageBox.warning(self, "Not Found", f"No product found for '{search_term}'.")
         self.async_worker.run_task(self.core.product_manager.search_products(self.company_id, search_term, limit=1), _on_done)
@@ -1367,9 +1221,7 @@ class PurchaseOrderDialog(QDialog):
         self.button_box.button(QDialogButtonBox.Save).setEnabled(False)
         def _on_done(r, e):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
-            if e or isinstance(r, Failure):
-                user_friendly_error = format_error_for_user(e or r)
-                QMessageBox.critical(self, "Creation Failed", f"Could not create Purchase Order: {user_friendly_error}")
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Creation Failed", f"Could not create Purchase Order: {e or r.error}")
             elif isinstance(r, Success):
                 QMessageBox.information(self, "Success", f"Purchase Order '{r.value.po_number}' created successfully!"); self.po_operation_completed.emit(); self.accept()
         self.async_worker.run_task(self.core.inventory_manager.create_purchase_order(po_dto), _on_done)
@@ -1405,17 +1257,25 @@ from app.core.result import Success, Failure
 from app.business_logic.dto.sales_dto import PaymentInfoDTO
 from app.models.sales import PaymentMethod # For type hinting
 
+class PaymentEntry:
+    """Helper class to hold payment details entered by user."""
+    def __init__(self, method_id: uuid.UUID, method_name: str, amount: Decimal):
+        self.method_id = method_id
+        self.method_name = method_name
+        self.amount = amount
+
+    def to_payment_info_dto(self) -> PaymentInfoDTO:
+        """Converts to PaymentInfoDTO."""
+        return PaymentInfoDTO(payment_method_id=self.method_id, amount=self.amount)
+
 class PaymentDialog(QDialog):
     """A dialog for collecting payment for a sales transaction, supporting split tender."""
-
-    # Class constant for table headers to avoid magic numbers
-    PAYMENTS_TABLE_HEADERS = ["Method", "Amount", "Action"]
 
     def __init__(self, core: ApplicationCore, total_due: Decimal, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.core = core
         self.total_due = total_due.quantize(Decimal("0.01"))
-        self.current_payments: List[PaymentInfoDTO] = []
+        self.current_payments: List[PaymentEntry] = []
         self.available_payment_methods: List[PaymentMethod] = []
 
         self.setWindowTitle("Process Payment")
@@ -1451,8 +1311,8 @@ class PaymentDialog(QDialog):
         payment_entry_layout.addWidget(self.amount_input)
         payment_entry_layout.addWidget(self.add_payment_button)
 
-        self.payments_table = QTableWidget(0, len(self.PAYMENTS_TABLE_HEADERS))
-        self.payments_table.setHorizontalHeaderLabels(self.PAYMENTS_TABLE_HEADERS)
+        self.payments_table = QTableWidget(0, 3) # Rows, Cols
+        self.payments_table.setHorizontalHeaderLabels(["Method", "Amount", "Action"])
         self.payments_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.payments_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
@@ -1499,8 +1359,7 @@ class PaymentDialog(QDialog):
 
     @Slot()
     def _update_summary_labels(self):
-        # FIX: Provide a Decimal start value to sum() to prevent errors on empty lists.
-        total_paid = sum((p.amount for p in self.current_payments), Decimal('0.0')).quantize(Decimal("0.01"))
+        total_paid = sum(p.amount for p in self.current_payments).quantize(Decimal("0.01"))
         balance = (self.total_due - total_paid).quantize(Decimal("0.01"))
 
         self.total_paid_label.setText(f"Amount Paid: S${total_paid:.2f}")
@@ -1523,8 +1382,8 @@ class PaymentDialog(QDialog):
             QMessageBox.warning(self, "Invalid Input", "Please select a payment method and enter a valid amount.")
             return
 
-        payment_info = PaymentInfoDTO(payment_method_id=selected_method_id, amount=amount)
-        self.current_payments.append(payment_info)
+        payment_entry = PaymentEntry(selected_method_id, selected_method_name, amount)
+        self.current_payments.append(payment_entry)
         
         row_idx = self.payments_table.rowCount()
         self.payments_table.insertRow(row_idx)
@@ -1555,7 +1414,7 @@ class PaymentDialog(QDialog):
         self.accept()
 
     def get_payment_info(self) -> List[PaymentInfoDTO]:
-        return self.current_payments
+        return [p.to_payment_info_dto() for p in self.current_payments]
 
 ```
 
@@ -1571,15 +1430,13 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
     QCheckBox, QDialogButtonBox, QMessageBox, QComboBox, QListView
 )
-# FIX: Import the 'Qt' namespace for enum access (e.g., Qt.Checked)
-from PySide6.QtCore import Slot, Signal, QObject, Qt
+from PySide6.QtCore import Slot, Signal, QObject
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 from app.business_logic.dto.user_dto import UserCreateDTO, UserUpdateDTO, UserDTO, RoleDTO
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.core.async_bridge import AsyncWorker
-from app.ui.utils import format_error_for_user
 
 class UserDialog(QDialog):
     """A dialog for creating or editing a user and assigning roles."""
@@ -1645,28 +1502,26 @@ class UserDialog(QDialog):
         """Loads available roles and populates the roles view."""
         def _on_done(result: Any, error: Optional[Exception]):
             if error or isinstance(result, Failure):
-                user_friendly_error = format_error_for_user(error or result)
-                QMessageBox.critical(self, "Error", f"Failed to load roles: {user_friendly_error}")
+                QMessageBox.critical(self, "Error", f"Failed to load roles: {error or result.error}")
                 return
             
-            if isinstance(result, Success):
-                self.available_roles = result.value
-                self.roles_model.clear()
-                for role in self.available_roles:
-                    item = QStandardItem(role.name)
-                    item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-                    item.setData(role.id, Qt.UserRole)
-                    item.setCheckState(Qt.Unchecked)
-                    self.roles_model.appendRow(item)
-                
-                # If in edit mode, check the roles the user already has
-                if self.is_edit_mode and self.user:
-                    user_role_ids = {role.id for role in self.user.roles}
-                    for i in range(self.roles_model.rowCount()):
-                        item = self.roles_model.item(i)
-                        role_id = item.data(Qt.UserRole)
-                        if role_id in user_role_ids:
-                            item.setCheckState(Qt.Checked)
+            self.available_roles = result.value
+            self.roles_model.clear()
+            for role in self.available_roles:
+                item = QStandardItem(role.name)
+                item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                item.setData(role.id, Qt.UserRole)
+                item.setCheckState(Qt.Unchecked)
+                self.roles_model.appendRow(item)
+            
+            # If in edit mode, check the roles the user already has
+            if self.is_edit_mode and self.user:
+                user_role_ids = {role.id for role in self.user.roles}
+                for i in range(self.roles_model.rowCount()):
+                    item = self.roles_model.item(i)
+                    role_id = item.data(Qt.UserRole)
+                    if role_id in user_role_ids:
+                        item.setCheckState(Qt.Checked)
 
         self.async_worker.run_task(self.core.user_manager.get_all_roles(self.core.current_company_id), _on_done)
 
@@ -1722,49 +1577,14 @@ class UserDialog(QDialog):
         def _on_done(result: Any, error: Optional[Exception]):
             self.button_box.button(QDialogButtonBox.Save).setEnabled(True)
             if error or isinstance(result, Failure):
-                user_friendly_error = format_error_for_user(error or result)
-                QMessageBox.critical(self, "Error", f"Operation failed: {user_friendly_error}")
+                QMessageBox.critical(self, "Error", f"Operation failed: {error or result.error}")
                 self.user_operation_completed.emit(False, str(error or result.error))
-            elif isinstance(result, Success):
+            else:
                 QMessageBox.information(self, "Success", "User saved successfully.")
                 self.user_operation_completed.emit(True, "Success")
                 self.accept()
 
         self.async_worker.run_task(coro, _on_done)
-
-```
-
-# app/ui/utils.py
-```py
-# File: app/ui/utils.py
-"""
-Provides common utility functions for the UI layer.
-"""
-from __future__ import annotations
-from typing import Any, Optional
-
-from app.core.result import Failure
-
-def format_error_for_user(error_obj: Any) -> str:
-    """
-    Formats an exception or Failure object into a user-friendly string.
-
-    Args:
-        error_obj: The error to format. Can be an Exception, a Failure, or any other object.
-
-    Returns:
-        A clean, human-readable error message.
-    """
-    if isinstance(error_obj, Failure):
-        # The .error attribute of a Failure object is expected to be a clean string
-        # from the business logic layer.
-        return str(error_obj.error)
-    if isinstance(error_obj, Exception):
-        # For raw, unexpected exceptions, provide a generic but clean message.
-        # The full exception should be logged elsewhere for developers.
-        # print(f"DEBUG: An unexpected exception occurred: {error_obj}") # For developer logs
-        return "An unexpected technical error occurred. Please contact support if the problem persists."
-    return "An unknown error occurred."
 
 ```
 
@@ -1801,7 +1621,7 @@ from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, Q
 from app.core.application_core import ApplicationCore
 from app.core.result import Result, Success, Failure
 from app.business_logic.dto.sales_dto import SaleCreateDTO, FinalizedSaleDTO
-from app.business_logic.dto.product_dto import ProductDTO, ProductBaseDTO
+from app.business_logic.dto.product_dto import ProductDTO
 from app.business_logic.dto.customer_dto import CustomerDTO
 from app.ui.dialogs.payment_dialog import PaymentDialog
 from app.core.async_bridge import AsyncWorker
@@ -1891,6 +1711,7 @@ class CartTableModel(QAbstractTableModel):
     def clear_cart(self):
         self.beginResetModel(); self._items.clear(); self.endResetModel(); self.cart_changed.emit()
     def get_cart_summary(self) -> Tuple[Decimal, Decimal, Decimal]:
+        # FIX: Provide a Decimal start value to sum() to prevent errors on empty carts
         subtotal = sum((item.line_subtotal for item in self._items), Decimal('0.0')).quantize(Decimal("0.01"))
         tax_amount = sum((item.line_tax for item in self._items), Decimal('0.0')).quantize(Decimal("0.01"))
         total_amount = sum((item.line_total for item in self._items), Decimal('0.0')).quantize(Decimal("0.01"))
@@ -1898,6 +1719,7 @@ class CartTableModel(QAbstractTableModel):
     def get_cart_items(self) -> List[Dict[str, Any]]: return [item.to_cart_item_dto() for item in self._items]
 
 class POSView(QWidget):
+    # ... (Rest of POSView is identical and correct)
     def __init__(self, core: ApplicationCore, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.core = core
@@ -1913,11 +1735,7 @@ class POSView(QWidget):
         self.cart_table.setModel(self.cart_model); self.cart_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.cart_table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows); self.cart_table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         self.cart_table.setEditTriggers(QTableView.EditTrigger.DoubleClicked | QTableView.EditTrigger.AnyKeyPressed)
-        self.subtotal_label = QLabel("Subtotal: S$0.00")
-        
-        # REFACTOR: Remove hardcoded GST rate from label text
-        self.tax_label = QLabel() 
-        
+        self.subtotal_label = QLabel("Subtotal: S$0.00"); self.tax_label = QLabel("GST (9.00%): S$0.00") # FIX: GST Rate Update
         self.total_label = QLabel("Total: S$0.00"); self.total_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #333;")
         totals_form_layout = QFormLayout(); totals_form_layout.addRow(self.subtotal_label); totals_form_layout.addRow(self.tax_label); totals_form_layout.addRow(self.total_label)
         left_layout.addWidget(QLabel("Current Sale Items")); left_layout.addWidget(self.cart_table, 1); left_layout.addLayout(totals_form_layout)
@@ -1934,9 +1752,6 @@ class POSView(QWidget):
         right_layout.addWidget(self.new_sale_button); right_layout.addWidget(self.void_sale_button); right_layout.addWidget(self.pay_button)
         main_layout = QHBoxLayout(self); main_layout.addWidget(left_panel, 2); main_layout.addWidget(right_panel, 1)
 
-        # REFACTOR: Set initial label text dynamically
-        self._update_totals()
-
     def _connect_signals(self):
         self.add_item_button.clicked.connect(self._on_add_item_clicked); self.product_search_input.returnPressed.connect(self._on_add_item_clicked)
         self.pay_button.clicked.connect(self._on_pay_clicked); self.new_sale_button.clicked.connect(self._reset_sale_clicked)
@@ -1946,12 +1761,7 @@ class POSView(QWidget):
     @Slot()
     def _update_totals(self):
         subtotal, tax_amount, total_amount = self.cart_model.get_cart_summary()
-        
-        # REFACTOR: Dynamically get default GST rate for display in the label
-        default_gst_rate = ProductBaseDTO.model_fields['gst_rate'].default
-
-        self.subtotal_label.setText(f"Subtotal: S${subtotal:.2f}")
-        self.tax_label.setText(f"GST ({default_gst_rate:.2f}%): S${tax_amount:.2f}")
+        self.subtotal_label.setText(f"Subtotal: S${subtotal:.2f}"); self.tax_label.setText(f"GST: S${tax_amount:.2f}")
         self.total_label.setText(f"Total: S${total_amount:.2f}")
 
     @Slot()
@@ -2038,14 +1848,13 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableView,
     QMessageBox, QLineEdit, QHeaderView, QSizePolicy
 )
-from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject, QTimer
+from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject
 
 from app.core.application_core import ApplicationCore
 from app.core.result import Success, Failure
 from app.business_logic.dto.customer_dto import CustomerDTO
 from app.ui.dialogs.customer_dialog import CustomerDialog
 from app.core.async_bridge import AsyncWorker
-from app.ui.widgets.managed_table_view import ManagedTableView
 
 class CustomerTableModel(QAbstractTableModel):
     """A Qt Table Model for displaying CustomerDTOs."""
@@ -2111,23 +1920,19 @@ class CustomerView(QWidget):
         self.core = core
         self.async_worker: AsyncWorker = core.async_worker
 
-        # REFACTOR: Add a timer for debouncing search input
-        self.search_timer = QTimer(self)
-        self.search_timer.setSingleShot(True)
-        self.search_timer.setInterval(350) # 350ms delay
-
         self._setup_ui()
         self._connect_signals()
         self._load_customers()
 
     def _setup_ui(self):
         """Initializes the UI widgets and layout."""
+        # --- Search and Action Buttons ---
         top_layout = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search customers by code, name, email, or phone...")
         self.add_button = QPushButton("Add New Customer")
         self.edit_button = QPushButton("Edit Selected")
-        self.delete_button = QPushButton("Deactivate Selected")
+        self.delete_button = QPushButton("Deactivate Selected") # Soft delete
 
         top_layout.addWidget(self.search_input, 1)
         top_layout.addStretch()
@@ -2135,20 +1940,21 @@ class CustomerView(QWidget):
         top_layout.addWidget(self.edit_button)
         top_layout.addWidget(self.delete_button)
         
-        self.managed_table = ManagedTableView()
+        # --- Customer Table ---
+        self.table_view = QTableView()
         self.customer_model = CustomerTableModel([])
-        self.managed_table.set_model(self.customer_model)
-        
-        table = self.managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        table.setSortingEnabled(True)
+        self.table_view.setModel(self.customer_model)
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.table_view.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        self.table_view.setSortingEnabled(True)
 
+        # --- Main Layout ---
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(top_layout)
-        main_layout.addWidget(self.managed_table)
+        main_layout.addWidget(self.table_view)
 
+        self.setLayout(main_layout)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
 
@@ -2157,46 +1963,35 @@ class CustomerView(QWidget):
         self.add_button.clicked.connect(self._on_add_customer)
         self.edit_button.clicked.connect(self._on_edit_customer)
         self.delete_button.clicked.connect(self._on_deactivate_customer)
-        
-        # REFACTOR: Connect search input to the timer for debouncing
-        self.search_input.textChanged.connect(self.search_timer.start)
-        self.search_timer.timeout.connect(self._trigger_search)
-        
-        self.managed_table.table().doubleClicked.connect(self._on_edit_customer)
+        self.search_input.textChanged.connect(self._on_search_customers)
+        self.table_view.doubleClicked.connect(self._on_edit_customer)
 
     def _get_selected_customer(self) -> Optional[CustomerDTO]:
         """Helper to get the currently selected customer from the table."""
-        selected_indexes = self.managed_table.table().selectionModel().selectedRows()
+        selected_indexes = self.table_view.selectionModel().selectedRows()
         if selected_indexes:
             row = selected_indexes[0].row()
             return self.customer_model.get_customer_at_row(row)
         return None
 
     @Slot()
-    def _trigger_search(self):
-        """Slot that is called by the timer's timeout to initiate a search."""
-        self._load_customers(search_term=self.search_input.text())
-
-    @Slot()
     def _load_customers(self, search_term: str = ""):
         """Loads customer data asynchronously into the table model."""
         company_id = self.core.current_company_id
-        self.managed_table.show_loading()
 
         def _on_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                self.customer_model.refresh_data([])
-                self.managed_table.show_empty(f"Error loading customers: {error or result.error}")
-                QMessageBox.critical(self, "Load Error", f"Failed to load customers: {error or result.error}")
+            if error:
+                QMessageBox.critical(self, "Load Error", f"Failed to load customers: {error}")
             elif isinstance(result, Success):
-                customers = result.value
-                self.customer_model.refresh_data(customers)
-                if customers:
-                    self.managed_table.show_table()
-                else:
-                    self.managed_table.show_empty("No customers found.")
+                self.customer_model.refresh_data(result.value)
+            elif isinstance(result, Failure):
+                QMessageBox.warning(self, "Load Failed", f"Could not load customers: {result.error}")
         
-        coro = self.core.customer_manager.search_customers(company_id, search_term) if search_term else self.core.customer_manager.get_all_customers(company_id)
+        if search_term:
+            coro = self.core.customer_manager.search_customers(company_id, search_term)
+        else:
+            coro = self.core.customer_manager.get_all_customers(company_id)
+        
         self.async_worker.run_task(coro, on_done_callback=_on_done)
 
     @Slot()
@@ -2233,14 +2028,23 @@ class CustomerView(QWidget):
             return
 
         def _on_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                QMessageBox.warning(self, "Deactivation Failed", f"Could not deactivate customer: {error or result.error}")
+            if error:
+                QMessageBox.critical(self, "Error", f"Failed to deactivate customer: {error}")
             elif isinstance(result, Success) and result.value:
                 QMessageBox.information(self, "Success", f"Customer '{selected_customer.name}' deactivated.")
-                self._load_customers(search_term=self.search_input.text())
+                self._load_customers()
+            elif isinstance(result, Failure):
+                QMessageBox.warning(self, "Deactivation Failed", f"Could not deactivate customer: {result.error}")
+            else:
+                QMessageBox.warning(self, "Deactivation Failed", "Customer not found or unknown error.")
         
         coro = self.core.customer_manager.deactivate_customer(selected_customer.id)
         self.async_worker.run_task(coro, on_done_callback=_on_done)
+
+    @Slot(str)
+    def _on_search_customers(self, text: str):
+        """Triggers customer search based on input text."""
+        self._load_customers(search_term=text)
 
     @Slot(bool, str)
     def _handle_customer_dialog_result(self, success: bool, message: str):
@@ -2263,7 +2067,7 @@ from PySide6.QtWidgets import (
     QTableView, QLabel, QLineEdit, QHeaderView, QSizePolicy, QMessageBox,
     QTabWidget
 )
-from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject, QPoint, QTimer
+from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject, QPoint
 from PySide6.QtGui import QAction, QCursor
 
 from app.core.application_core import ApplicationCore
@@ -2271,9 +2075,8 @@ from app.core.result import Success, Failure
 from app.business_logic.dto.inventory_dto import InventorySummaryDTO, PurchaseOrderDTO, StockMovementDTO
 from app.ui.dialogs.stock_adjustment_dialog import StockAdjustmentDialog
 from app.ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
-from app.ui.dialogs.receive_po_dialog import ReceivePODialog
+from app.ui.dialogs.receive_po_dialog import ReceivePODialog # Import the new dialog
 from app.core.async_bridge import AsyncWorker
-from app.ui.widgets.managed_table_view import ManagedTableView
 
 class InventoryTableModel(QAbstractTableModel):
     HEADERS = ["SKU", "Name", "Category", "On Hand", "Reorder Pt.", "Cost", "Selling Price", "Active"]
@@ -2288,8 +2091,7 @@ class InventoryTableModel(QAbstractTableModel):
         col = i.column()
         if r == Qt.DisplayRole:
             if col == 0: return item.sku
-            # FIX: The DTO attribute is 'product_name', not 'name'.
-            if col == 1: return item.product_name
+            if col == 1: return item.name
             if col == 2: return item.category_name or "N/A"
             if col == 3: return str(item.quantity_on_hand)
             if col == 4: return str(item.reorder_point)
@@ -2357,14 +2159,9 @@ class InventoryView(QWidget):
         self.company_id = self.core.current_company_id
         self.outlet_id = self.core.current_outlet_id
         self.user_id = self.core.current_user_id
-
-        self.inventory_search_timer = QTimer(self)
-        self.inventory_search_timer.setSingleShot(True)
-        self.inventory_search_timer.setInterval(350)
-
         self._setup_ui()
         self._connect_signals()
-        self._on_tab_changed(0) 
+        self._load_inventory_summary()
 
     def _setup_ui(self):
         self.tab_widget = QTabWidget()
@@ -2378,94 +2175,57 @@ class InventoryView(QWidget):
         main_layout.addWidget(self.tab_widget)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-    def _create_inventory_summary_tab(self) -> QWidget:
+    def _create_inventory_summary_tab(self):
         tab = QWidget(); layout = QVBoxLayout(tab); top_layout = QHBoxLayout()
-        self.inventory_search_input = QLineEdit(); self.inventory_search_input.setPlaceholderText("Search product by SKU or name...")
+        self.inventory_search_input = QLineEdit(); self.inventory_search_input.setPlaceholderText("Search product...")
         self.adjust_stock_button = QPushButton("Adjust Stock")
         top_layout.addWidget(self.inventory_search_input, 1); top_layout.addStretch(); top_layout.addWidget(self.adjust_stock_button)
-        
-        self.inventory_managed_table = ManagedTableView()
-        self.inventory_model = InventoryTableModel([])
-        self.inventory_managed_table.set_model(self.inventory_model)
-        
-        table = self.inventory_managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        
-        layout.addLayout(top_layout)
-        layout.addWidget(self.inventory_managed_table)
+        self.inventory_table = QTableView(); self.inventory_model = InventoryTableModel([])
+        self.inventory_table.setModel(self.inventory_model); self.inventory_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.inventory_table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows); self.inventory_table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        layout.addLayout(top_layout); layout.addWidget(self.inventory_table)
         return tab
 
-    def _create_purchase_orders_tab(self) -> QWidget:
+    def _create_purchase_orders_tab(self):
         tab = QWidget(); layout = QVBoxLayout(tab); top_layout = QHBoxLayout()
-        self.new_po_button = QPushButton("New Purchase Order")
-        self.receive_po_button = QPushButton("Receive Items on PO")
+        self.new_po_button = QPushButton("New Purchase Order"); self.receive_po_button = QPushButton("Receive Items on PO")
         top_layout.addStretch(); top_layout.addWidget(self.new_po_button); top_layout.addWidget(self.receive_po_button)
-        
-        self.po_managed_table = ManagedTableView()
-        self.po_model = PurchaseOrderTableModel([])
-        self.po_managed_table.set_model(self.po_model)
-        
-        table = self.po_managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        
-        layout.addLayout(top_layout)
-        layout.addWidget(self.po_managed_table)
+        self.po_table = QTableView(); self.po_model = PurchaseOrderTableModel([])
+        self.po_table.setModel(self.po_model); self.po_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.po_table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows); self.po_table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        layout.addLayout(top_layout); layout.addWidget(self.po_table)
         return tab
 
-    def _create_stock_movements_tab(self) -> QWidget:
+    def _create_stock_movements_tab(self):
         tab = QWidget(); layout = QVBoxLayout(tab)
-        
-        self.movements_managed_table = ManagedTableView()
-        self.movements_model = StockMovementTableModel([])
-        self.movements_managed_table.set_model(self.movements_model)
-        self.movements_managed_table.table().horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        
-        self.movements_title_label = QLabel("Click on a product in 'Current Stock' to see its history.")
-        self.movements_title_label.setStyleSheet("font-size: 14px; padding: 5px;")
-        
-        layout.addWidget(self.movements_title_label)
-        layout.addWidget(self.movements_managed_table)
+        self.movements_table = QTableView(); self.movements_model = StockMovementTableModel([])
+        self.movements_table.setModel(self.movements_model); self.movements_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.movements_title_label = QLabel("Stock movement history will appear here.")
+        layout.addWidget(self.movements_title_label); layout.addWidget(self.movements_table)
         return tab
 
     def _connect_signals(self):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
-        
-        self.inventory_search_input.textChanged.connect(self.inventory_search_timer.start)
-        self.inventory_search_timer.timeout.connect(self._trigger_inventory_search)
-
+        self.inventory_search_input.textChanged.connect(self._on_inventory_search)
         self.adjust_stock_button.clicked.connect(self._on_adjust_stock)
-        self.inventory_managed_table.table().doubleClicked.connect(self._on_view_product_stock_history)
+        self.inventory_table.doubleClicked.connect(self._on_view_product_stock_history)
         self.new_po_button.clicked.connect(self._on_new_po)
-        self.po_managed_table.table().doubleClicked.connect(self._on_receive_po_items)
         self.receive_po_button.clicked.connect(self._on_receive_po_items)
 
     @Slot(int)
-    def _on_tab_changed(self, index: int):
+    def _on_tab_changed(self, index):
         if index == 0: self._load_inventory_summary()
         elif index == 1: self._load_purchase_orders()
-        elif index == 2:
-            self.movements_title_label.setText("Click on a product in 'Current Stock' to see its history.")
-            self.movements_model.refresh_data([])
-            self.movements_managed_table.show_empty("Select a product to view its movements.")
-
-    @Slot()
-    def _trigger_inventory_search(self):
-        self._load_inventory_summary(search_term=self.inventory_search_input.text())
+        elif index == 2: self.movements_title_label.setText("Stock movement history will appear here."); self.movements_model.refresh_data([])
 
     def _load_inventory_summary(self, search_term: str = ""):
-        self.inventory_managed_table.show_loading()
         def _on_done(r, e):
-            if e or isinstance(r, Failure):
-                self.inventory_model.refresh_data([])
-                self.inventory_managed_table.show_empty(f"Error: {e or r.error}")
-            elif isinstance(r, Success):
-                self.inventory_model.refresh_data(r.value)
-                self.inventory_managed_table.show_table() if r.value else self.inventory_managed_table.show_empty("No inventory items found.")
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load inventory: {e or r.error}")
+            elif isinstance(r, Success): self.inventory_model.refresh_data(r.value)
         self.async_worker.run_task(self.core.inventory_manager.get_inventory_summary(self.company_id, self.outlet_id, search_term=search_term), on_done_callback=_on_done)
+
+    @Slot(str)
+    def _on_inventory_search(self, text): self._load_inventory_summary(search_term=text)
 
     @Slot()
     def _on_adjust_stock(self):
@@ -2474,21 +2234,16 @@ class InventoryView(QWidget):
         dialog.exec()
 
     @Slot(QModelIndex)
-    def _on_view_product_stock_history(self, index: QModelIndex):
+    def _on_view_product_stock_history(self, index):
         item = self.inventory_model.get_item_at_row(index.row())
         if not item: return
         self.tab_widget.setCurrentWidget(self.stock_movements_tab)
-        self._load_stock_movements(product_id=item.product_id, product_name=item.product_name)
+        self._load_stock_movements(product_id=item.product_id, product_sku=item.sku)
 
     def _load_purchase_orders(self):
-        self.po_managed_table.show_loading()
         def _on_done(r, e):
-            if e or isinstance(r, Failure):
-                self.po_model.refresh_data([])
-                self.po_managed_table.show_empty(f"Error: {e or r.error}")
-            elif isinstance(r, Success):
-                self.po_model.refresh_data(r.value)
-                self.po_managed_table.show_table() if r.value else self.po_managed_table.show_empty("No purchase orders found.")
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load purchase orders: {e or r.error}")
+            elif isinstance(r, Success): self.po_model.refresh_data(r.value)
         self.async_worker.run_task(self.core.inventory_manager.get_all_purchase_orders(self.company_id, self.outlet_id), on_done_callback=_on_done)
 
     @Slot()
@@ -2499,16 +2254,17 @@ class InventoryView(QWidget):
 
     @Slot()
     def _on_receive_po_items(self):
-        selected_index = self.po_managed_table.table().currentIndex()
+        selected_index = self.po_table.currentIndex()
         if not selected_index.isValid():
             QMessageBox.information(self, "No Selection", "Please select a Purchase Order to receive items.")
             return
         
         selected_po = self.po_model.get_po_at_row(selected_index.row())
-        if not selected_po: return
+        if not selected_po:
+            return
 
         if selected_po.status not in ['SENT', 'PARTIALLY_RECEIVED']:
-            QMessageBox.warning(self, "Invalid Status", f"Cannot receive items for a PO with status '{selected_po.status.replace('_', ' ').title()}'.")
+            QMessageBox.warning(self, "Invalid Status", f"Cannot receive items for a PO with status '{selected_po.status}'.")
             return
 
         dialog = ReceivePODialog(selected_po, self)
@@ -2517,7 +2273,8 @@ class InventoryView(QWidget):
 
     @Slot(list)
     def _process_po_receipt(self, items_to_receive: List[Dict[str, Any]]):
-        selected_po = self.po_model.get_po_at_row(self.po_managed_table.table().currentIndex().row())
+        """Receives the items from the dialog and calls the manager."""
+        selected_po = self.po_model.get_po_at_row(self.po_table.currentIndex().row())
         if not selected_po: return
 
         self.receive_po_button.setEnabled(False)
@@ -2528,32 +2285,19 @@ class InventoryView(QWidget):
                 QMessageBox.critical(self, "Receiving Failed", f"Could not process receipt: {error or result.error}")
             elif isinstance(result, Success):
                 QMessageBox.information(self, "Success", "Items received successfully.")
-                self._load_purchase_orders()
-                if self.tab_widget.currentIndex() == 0:
-                    self._load_inventory_summary()
+                self._load_purchase_orders() # Refresh the list
 
         coro = self.core.inventory_manager.receive_purchase_order_items(
             selected_po.id, items_to_receive, self.user_id
         )
         self.async_worker.run_task(coro, on_done_callback=_on_done)
 
-    def _load_stock_movements(self, product_id: Optional[uuid.UUID] = None, product_name: str = "product"):
-        if not product_id:
-            self.movements_model.refresh_data([])
-            self.movements_managed_table.show_empty("Select a product to view its movements.")
-            return
-
-        self.movements_title_label.setText(f"Stock Movement History for: {product_name} ({product_id})")
-        self.movements_managed_table.show_loading()
-
+    def _load_stock_movements(self, product_id: Optional[uuid.UUID] = None, product_sku: str = "product"):
+        if not product_id: self.movements_model.refresh_data([]); return
+        self.movements_title_label.setText(f"Stock Movement History for: {product_sku}")
         def _on_done(r, e):
-            if e or isinstance(r, Failure):
-                self.movements_model.refresh_data([])
-                self.movements_managed_table.show_empty(f"Error: {e or r.error}")
-            elif isinstance(r, Success):
-                self.movements_model.refresh_data(r.value)
-                self.movements_managed_table.show_table() if r.value else self.movements_managed_table.show_empty("No movement history for this item.")
-        
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Error", f"Failed to load stock movements: {e or r.error}")
+            elif isinstance(r, Success): self.movements_model.refresh_data(r.value)
         self.async_worker.run_task(self.core.inventory_manager.get_stock_movements_for_product(self.company_id, product_id), on_done_callback=_on_done)
 
 ```
@@ -2578,8 +2322,6 @@ from app.business_logic.dto.company_dto import CompanyDTO, CompanyUpdateDTO
 from app.business_logic.dto.user_dto import UserDTO, UserCreateDTO, UserUpdateDTO, RoleDTO
 from app.core.async_bridge import AsyncWorker
 from app.ui.dialogs.user_dialog import UserDialog
-from app.ui.views.payment_method_view import PaymentMethodView
-from app.ui.widgets.managed_table_view import ManagedTableView
 
 class UserTableModel(QAbstractTableModel):
     HEADERS = ["Username", "Full Name", "Email", "Role(s)", "Active"]
@@ -2612,19 +2354,18 @@ class SettingsView(QWidget):
         self._setup_ui()
         self._connect_signals()
         
-        # Load data for the initially visible tab
+        # Load data when the view is created
         self._load_company_info()
-        self.tab_widget.currentChanged.connect(self._on_tab_changed)
-
+        self._load_users()
 
     def _setup_ui(self):
         self.tab_widget = QTabWidget()
         self.tab_widget.addTab(self._create_company_tab(), "Company Information")
         self.tab_widget.addTab(self._create_users_tab(), "User Management")
-        self.tab_widget.addTab(self._create_payment_methods_tab(), "Payment Methods")
+        self.tab_widget.addTab(QLabel("Payment Methods Configuration (Coming Soon)"), "Payment Methods")
         main_layout = QVBoxLayout(self); main_layout.addWidget(self.tab_widget)
 
-    def _create_company_tab(self) -> QWidget:
+    def _create_company_tab(self):
         tab = QWidget(); layout = QFormLayout(tab)
         self.company_name_input = QLineEdit()
         self.company_reg_no_input = QLineEdit()
@@ -2642,7 +2383,7 @@ class SettingsView(QWidget):
         layout.addWidget(self.company_save_button)
         return tab
         
-    def _create_users_tab(self) -> QWidget:
+    def _create_users_tab(self):
         tab = QWidget(); layout = QVBoxLayout(tab)
         buttons_layout = QHBoxLayout()
         self.add_user_button = QPushButton("Add New User")
@@ -2652,42 +2393,23 @@ class SettingsView(QWidget):
         buttons_layout.addWidget(self.add_user_button)
         buttons_layout.addWidget(self.edit_user_button)
         buttons_layout.addWidget(self.deactivate_user_button)
-
-        self.user_managed_table = ManagedTableView()
-        self.user_model = UserTableModel([])
-        self.user_managed_table.set_model(self.user_model)
-        
-        table = self.user_managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.setSelectionBehavior(QTableView.SelectRows)
-        table.setSelectionMode(QTableView.SingleSelection)
-        
-        layout.addLayout(buttons_layout)
-        layout.addWidget(self.user_managed_table)
+        self.user_table = QTableView(); self.user_model = UserTableModel([]); self.user_table.setModel(self.user_model)
+        self.user_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.user_table.setSelectionBehavior(QTableView.SelectRows)
+        self.user_table.setSelectionMode(QTableView.SingleSelection)
+        layout.addLayout(buttons_layout); layout.addWidget(self.user_table)
         return tab
-
-    def _create_payment_methods_tab(self) -> QWidget:
-        payment_method_view = PaymentMethodView(self.core)
-        return payment_method_view
 
     def _connect_signals(self):
         self.company_save_button.clicked.connect(self._on_save_company_info)
         self.add_user_button.clicked.connect(self._on_add_user)
         self.edit_user_button.clicked.connect(self._on_edit_user)
         self.deactivate_user_button.clicked.connect(self._on_deactivate_user)
-        self.user_managed_table.table().doubleClicked.connect(self._on_edit_user)
-
-    @Slot(int)
-    def _on_tab_changed(self, index: int):
-        """Load data for the newly selected tab."""
-        if index == 0:
-            self._load_company_info()
-        elif index == 1:
-            self._load_users()
-        # The payment methods tab's view loads its own data upon creation.
+        self.user_table.doubleClicked.connect(self._on_edit_user)
 
     @Slot()
     def _load_company_info(self):
+        """Loads the current company's information into the form fields."""
         self.company_save_button.setEnabled(False)
         def _on_done(result: Any, error: Optional[Exception]):
             self.company_save_button.setEnabled(True)
@@ -2706,6 +2428,7 @@ class SettingsView(QWidget):
 
     @Slot()
     def _on_save_company_info(self):
+        """Gathers data from form, creates DTO, and calls manager to save."""
         dto = CompanyUpdateDTO(
             name=self.company_name_input.text().strip(),
             registration_number=self.company_reg_no_input.text().strip(),
@@ -2722,23 +2445,15 @@ class SettingsView(QWidget):
                 QMessageBox.critical(self, "Save Error", f"Failed to save company info: {error or result.error}")
             elif isinstance(result, Success):
                 QMessageBox.information(self, "Success", "Company information saved successfully.")
-                self._load_company_info()
+                self._load_company_info() # Refresh data
 
         self.async_worker.run_task(self.core.company_manager.update_company(self.company_id, dto), on_done_callback=_on_done)
 
     @Slot()
     def _load_users(self):
-        self.user_managed_table.show_loading()
         def _on_done(r, e):
-            if e or isinstance(r, Failure):
-                self.user_model.refresh_data([])
-                self.user_managed_table.show_empty(f"Error: {e or r.error}")
-            elif isinstance(r, Success):
-                self.user_model.refresh_data(r.value)
-                if r.value:
-                    self.user_managed_table.show_table()
-                else:
-                    self.user_managed_table.show_empty("No users found.")
+            if e or isinstance(r, Failure): QMessageBox.critical(self, "Load Error", f"Failed to load users: {e or r.error}")
+            elif isinstance(r, Success): self.user_model.refresh_data(r.value)
         self.async_worker.run_task(self.core.user_manager.get_all_users(self.company_id), on_done_callback=_on_done)
 
     @Slot()
@@ -2749,7 +2464,7 @@ class SettingsView(QWidget):
     
     @Slot()
     def _on_edit_user(self):
-        selected_user = self.user_model.get_user_at_row(self.user_managed_table.table().currentIndex().row())
+        selected_user = self.user_model.get_user_at_row(self.user_table.currentIndex().row())
         if not selected_user:
             QMessageBox.information(self, "No Selection", "Please select a user to edit.")
             return
@@ -2759,7 +2474,7 @@ class SettingsView(QWidget):
 
     @Slot()
     def _on_deactivate_user(self):
-        selected_user = self.user_model.get_user_at_row(self.user_managed_table.table().currentIndex().row())
+        selected_user = self.user_model.get_user_at_row(self.user_table.currentIndex().row())
         if not selected_user:
             QMessageBox.information(self, "No Selection", "Please select a user to deactivate.")
             return
@@ -3025,105 +2740,6 @@ class ReportsView(QWidget):
 
 ```
 
-# app/ui/views/dashboard_view.py
-```py
-# File: app/ui/views/dashboard_view.py
-"""The main dashboard view for displaying Key Performance Indicators (KPIs)."""
-from __future__ import annotations
-from typing import Optional, Any
-from decimal import Decimal
-
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QSizePolicy, QGridLayout
-)
-from PySide6.QtCore import Qt, QObject, Slot
-
-from app.core.application_core import ApplicationCore
-from app.core.result import Success, Failure
-from app.business_logic.dto.reporting_dto import DashboardStatsDTO
-from app.ui.widgets.kpi_widget import KpiWidget
-
-class DashboardView(QWidget):
-    """A view widget to display a dashboard of business KPIs."""
-    
-    def __init__(self, core: ApplicationCore, parent: Optional[QObject] = None):
-        super().__init__(parent)
-        self.core = core
-        self.async_worker = core.async_worker
-        
-        self._setup_ui()
-        self._connect_signals()
-        
-    def showEvent(self, event):
-        """Overrides QWidget.showEvent to trigger data loading when the view becomes visible."""
-        super().showEvent(event)
-        # Load data every time the dashboard is shown to ensure it's fresh.
-        self._load_data()
-
-    def _setup_ui(self):
-        """Initializes the UI widgets and layout."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        
-        title = QLabel("Dashboard")
-        title.setStyleSheet("font-size: 28px; font-weight: bold; padding-bottom: 10px;")
-        
-        # Grid layout for KPIs
-        kpi_layout = QGridLayout()
-        kpi_layout.setSpacing(20)
-
-        self.sales_kpi = KpiWidget("Today's Sales")
-        self.transactions_kpi = KpiWidget("Today's Transactions")
-        self.customers_kpi = KpiWidget("New Customers (Month)")
-        self.low_stock_kpi = KpiWidget("Low Stock Items")
-        self.low_stock_kpi.set_value_color("#E74C3C") # Use a warning color for low stock
-
-        kpi_layout.addWidget(self.sales_kpi, 0, 0)
-        kpi_layout.addWidget(self.transactions_kpi, 0, 1)
-        kpi_layout.addWidget(self.customers_kpi, 1, 0)
-        kpi_layout.addWidget(self.low_stock_kpi, 1, 1)
-
-        main_layout.addWidget(title)
-        main_layout.addLayout(kpi_layout)
-        main_layout.addStretch()
-        
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
-    def _connect_signals(self):
-        """Connect UI signals to slots."""
-        pass # No interactive signals yet.
-        
-    @Slot()
-    def _load_data(self):
-        """Fetches and displays dashboard data."""
-        # Set loading text on all KPI widgets
-        self.sales_kpi.set_kpi_value("Loading...")
-        self.transactions_kpi.set_kpi_value("...")
-        self.customers_kpi.set_kpi_value("...")
-        self.low_stock_kpi.set_kpi_value("...")
-
-        def on_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                error_msg = f"Error: {error or result.error}"
-                self.sales_kpi.set_kpi_value(error_msg)
-                self.transactions_kpi.set_kpi_value("N/A")
-                self.customers_kpi.set_kpi_value("N/A")
-                self.low_stock_kpi.set_kpi_value("N/A")
-                return
-
-            if isinstance(result, Success):
-                stats: DashboardStatsDTO = result.value
-                self.sales_kpi.set_kpi_value(f"S$ {stats.total_sales_today:,.2f}")
-                self.transactions_kpi.set_kpi_value(f"{stats.transaction_count_today}")
-                self.customers_kpi.set_kpi_value(f"{stats.new_customers_this_month}")
-                self.low_stock_kpi.set_kpi_value(f"{stats.low_stock_item_count}")
-        
-        coro = self.core.reporting_manager.generate_dashboard_stats(self.core.current_company_id)
-        self.core.async_worker.run_task(coro, on_done_callback=on_done)
-
-```
-
 # app/ui/views/product_view.py
 ```py
 # File: app/ui/views/product_view.py
@@ -3143,7 +2759,6 @@ from app.core.result import Success, Failure
 from app.business_logic.dto.product_dto import ProductDTO
 from app.ui.dialogs.product_dialog import ProductDialog
 from app.core.async_bridge import AsyncWorker
-from app.ui.widgets.managed_table_view import ManagedTableView
 
 class ProductTableModel(QAbstractTableModel):
     """A Qt Table Model for displaying ProductDTOs."""
@@ -3195,6 +2810,7 @@ class ProductView(QWidget):
         self.core = core
         self.async_worker: AsyncWorker = core.async_worker
 
+        # FIX: Initialize the search_timer attribute *before* it is used in _connect_signals.
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(350) # 350ms delay
@@ -3217,62 +2833,53 @@ class ProductView(QWidget):
         top_layout.addWidget(self.edit_button)
         top_layout.addWidget(self.delete_button)
         
-        # --- Refactor: Use ManagedTableView ---
-        self.managed_table = ManagedTableView()
+        self.table_view = QTableView()
         self.product_model = ProductTableModel()
-        self.managed_table.set_model(self.product_model)
-        
-        table = self.managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        table.setSortingEnabled(True)
+        self.table_view.setModel(self.product_model)
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.table_view.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        self.table_view.setSortingEnabled(True)
 
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(top_layout)
-        main_layout.addWidget(self.managed_table) # Add the managed widget instead of the raw table
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        main_layout.addWidget(self.table_view)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def _connect_signals(self):
         self.add_button.clicked.connect(self._on_add_product)
         self.edit_button.clicked.connect(self._on_edit_product)
         self.delete_button.clicked.connect(self._on_deactivate_product)
+        # Connect search input to the timer, which is now guaranteed to exist.
         self.search_input.textChanged.connect(self.search_timer.start)
+        # Connect the timer's timeout signal to the actual load function.
         self.search_timer.timeout.connect(self._load_products)
-        # Connect to the table inside the managed widget
-        self.managed_table.table().doubleClicked.connect(self._on_edit_product)
+        self.table_view.doubleClicked.connect(self._on_edit_product)
 
     def _get_selected_product(self) -> Optional[ProductDTO]:
-        selected_indexes = self.managed_table.table().selectionModel().selectedRows()
+        selected_indexes = self.table_view.selectionModel().selectedRows()
         return self.product_model.get_product_at_row(selected_indexes[0].row()) if selected_indexes else None
 
     @Slot()
     def _load_products(self):
         """
-        Loads products from the backend, now with UI state management.
+        Loads products from the backend.
+        This is triggered by the search timer or manually after an operation.
         """
         search_term = self.search_input.text().strip()
-        self.add_button.setEnabled(False) 
+        self.add_button.setEnabled(False) # Disable buttons during load
         self.edit_button.setEnabled(False)
         self.delete_button.setEnabled(False)
-        self.managed_table.show_loading() # Show loading state
 
         def _on_done(result: Any, error: Optional[Exception]):
-            self.add_button.setEnabled(True)
+            self.add_button.setEnabled(True) # Re-enable buttons
             self.edit_button.setEnabled(True)
             self.delete_button.setEnabled(True)
-            
             if error or isinstance(result, Failure):
                 QMessageBox.critical(self, "Load Error", f"Failed to load products: {error or result.error}")
-                self.product_model.refresh_data([])
-                self.managed_table.show_empty(f"Error: {error or result.error}")
+                self.product_model.refresh_data([]) # Clear table on error
             elif isinstance(result, Success):
-                products = result.value
-                self.product_model.refresh_data(products)
-                if products:
-                    self.managed_table.show_table()
-                else:
-                    self.managed_table.show_empty("No products found.")
+                self.product_model.refresh_data(result.value)
         
         coro = self.core.product_manager.search_products(self.core.current_company_id, search_term) if search_term else self.core.product_manager.get_all_products(self.core.current_company_id)
         self.async_worker.run_task(coro, on_done_callback=_on_done)
@@ -3315,182 +2922,7 @@ class ProductView(QWidget):
     @Slot(bool, str)
     def _handle_operation_completed(self, success: bool, message: str):
         if success:
-            self._load_products()
-
-```
-
-# app/ui/views/payment_method_view.py
-```py
-# File: app/ui/views/payment_method_view.py
-"""A view for managing PaymentMethod entities."""
-from __future__ import annotations
-from typing import List, Any, Optional
-
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableView,
-    QMessageBox, QHeaderView, QSizePolicy
-)
-from PySide6.QtCore import Slot, Signal, QAbstractTableModel, QModelIndex, Qt, QObject
-
-from app.core.application_core import ApplicationCore
-from app.core.result import Success, Failure
-from app.business_logic.dto.payment_dto import PaymentMethodDTO
-from app.ui.dialogs.payment_method_dialog import PaymentMethodDialog
-from app.ui.widgets.managed_table_view import ManagedTableView
-
-class PaymentMethodTableModel(QAbstractTableModel):
-    """A Qt Table Model for displaying PaymentMethodDTOs."""
-    HEADERS = ["Name", "Type", "Is Active"]
-
-    def __init__(self, methods: List[PaymentMethodDTO] = None, parent: Optional[QObject] = None):
-        super().__init__(parent)
-        self._methods = methods or []
-
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
-        return len(self._methods)
-
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
-        return len(self.HEADERS)
-
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-
-    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
-        if not index.isValid(): return None
-        method = self._methods[index.row()]
-        col = index.column()
-
-        if role == Qt.DisplayRole:
-            if col == 0: return method.name
-            if col == 1: return method.type.value.replace('_', ' ').title()
-            if col == 2: return "Yes" if method.is_active else "No"
-        
-        if role == Qt.TextAlignmentRole and col == 2:
-            return Qt.AlignCenter | Qt.AlignVCenter
-        
-        return None
-
-    def get_method_at_row(self, row: int) -> Optional[PaymentMethodDTO]:
-        return self._methods[row] if 0 <= row < len(self._methods) else None
-
-    def refresh_data(self, new_methods: List[PaymentMethodDTO]):
-        self.beginResetModel()
-        self._methods = new_methods
-        self.endResetModel()
-
-class PaymentMethodView(QWidget):
-    """A view widget to display and manage the list of payment methods."""
-    def __init__(self, core: ApplicationCore, parent: Optional[QObject] = None):
-        super().__init__(parent)
-        self.core = core
-        self._setup_ui()
-        self._connect_signals()
-        self._load_data()
-
-    def _setup_ui(self):
-        top_layout = QHBoxLayout()
-        self.add_button = QPushButton("Add New Method")
-        self.edit_button = QPushButton("Edit Selected")
-        self.deactivate_button = QPushButton("Deactivate Selected")
-
-        top_layout.addStretch()
-        top_layout.addWidget(self.add_button)
-        top_layout.addWidget(self.edit_button)
-        top_layout.addWidget(self.deactivate_button)
-        
-        self.managed_table = ManagedTableView()
-        self.table_model = PaymentMethodTableModel()
-        self.managed_table.set_model(self.table_model)
-        
-        table = self.managed_table.table()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        table.setSortingEnabled(True)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.addLayout(top_layout)
-        main_layout.addWidget(self.managed_table)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-    def _connect_signals(self):
-        self.add_button.clicked.connect(self._on_add)
-        self.edit_button.clicked.connect(self._on_edit)
-        self.deactivate_button.clicked.connect(self._on_deactivate)
-        self.managed_table.table().doubleClicked.connect(self._on_edit)
-
-    def _get_selected_method(self) -> Optional[PaymentMethodDTO]:
-        selected_indexes = self.managed_table.table().selectionModel().selectedRows()
-        if selected_indexes:
-            row = selected_indexes[0].row()
-            return self.table_model.get_method_at_row(row)
-        return None
-
-    @Slot()
-    def _load_data(self):
-        """Loads payment method data asynchronously into the table model."""
-        self.managed_table.show_loading()
-
-        def on_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                self.table_model.refresh_data([])
-                self.managed_table.show_empty(f"Error: {error or result.error}")
-            elif isinstance(result, Success):
-                methods = result.value
-                self.table_model.refresh_data(methods)
-                if methods:
-                    self.managed_table.show_table()
-                else:
-                    self.managed_table.show_empty("No payment methods have been configured.")
-
-        coro = self.core.payment_method_manager.get_all_payment_methods(self.core.current_company_id)
-        self.core.async_worker.run_task(coro, on_done_callback=on_done)
-
-    @Slot()
-    def _on_add(self):
-        dialog = PaymentMethodDialog(self.core, parent=self)
-        dialog.operation_completed.connect(self._load_data)
-        dialog.exec()
-
-    @Slot()
-    def _on_edit(self):
-        selected_method = self._get_selected_method()
-        if not selected_method:
-            QMessageBox.information(self, "No Selection", "Please select a payment method to edit.")
-            return
-
-        dialog = PaymentMethodDialog(self.core, method=selected_method, parent=self)
-        dialog.operation_completed.connect(self._load_data)
-        dialog.exec()
-
-    @Slot()
-    def _on_deactivate(self):
-        selected_method = self._get_selected_method()
-        if not selected_method:
-            QMessageBox.information(self, "No Selection", "Please select a method to deactivate.")
-            return
-
-        if not selected_method.is_active:
-            QMessageBox.information(self, "Already Inactive", f"'{selected_method.name}' is already inactive.")
-            return
-        
-        reply = QMessageBox.question(self, "Confirm Deactivation",
-                                     f"Are you sure you want to deactivate '{selected_method.name}'?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.No:
-            return
-
-        def on_done(result: Any, error: Optional[Exception]):
-            if error or isinstance(result, Failure):
-                QMessageBox.critical(self, "Error", f"Failed to deactivate method: {error or result.error}")
-            elif isinstance(result, Success):
-                QMessageBox.information(self, "Success", f"'{selected_method.name}' has been deactivated.")
-                self._load_data()
-        
-        coro = self.core.payment_method_manager.deactivate_payment_method(selected_method.id)
-        self.core.async_worker.run_task(coro, on_done_callback=on_done)
+            self._load_products() # Refresh the view
 
 ```
 
@@ -3519,7 +2951,6 @@ from app.core.async_bridge import AsyncWorker
 
 # Import all view classes that will be lazy-loaded
 from app.ui.views.pos_view import POSView
-from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.product_view import ProductView
 from app.ui.views.customer_view import CustomerView
 from app.ui.views.inventory_view import InventoryView
@@ -3541,7 +2972,6 @@ class MainWindow(QMainWindow):
         # --- Lazy Loading Implementation ---
         # 1. A dictionary to hold view definitions and cache instances
         self.views: Dict[str, Dict[str, Optional[Type[QWidget]]]] = {
-            "dashboard": {"class": DashboardView, "instance": None},
             "product":   {"class": ProductView,   "instance": None},
             "customer":  {"class": CustomerView,  "instance": None},
             "inventory": {"class": InventoryView, "instance": None},
@@ -3563,9 +2993,6 @@ class MainWindow(QMainWindow):
         
         file_menu = menu_bar.addMenu("&File")
         file_menu.addAction("E&xit", self.close)
-
-        dashboard_menu = menu_bar.addMenu("&Dashboard")
-        dashboard_menu.addAction("Show Dashboard", lambda: self._show_view("dashboard"))
 
         pos_menu = menu_bar.addMenu("&POS")
         pos_menu.addAction("Sales Screen", lambda: self.stacked_widget.setCurrentWidget(self.pos_view))
@@ -3617,138 +3044,8 @@ class MainWindow(QMainWindow):
 
 ```
 
-# app/ui/widgets/kpi_widget.py
+# app/ui/widgets/searchable_table_view.py
 ```py
-# File: app/ui/widgets/kpi_widget.py
-"""
-A custom QFrame widget to display a single Key Performance Indicator (KPI).
-"""
-from __future__ import annotations
-from typing import Optional
-
-from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt
-
-class KpiWidget(QFrame):
-    """
-    A styled frame that displays a title and a large value, representing a KPI.
-    """
-    def __init__(self, title: str, parent: Optional[QWidget] = None):
-        super().__init__(parent)
-        self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
-        self.setMinimumSize(200, 120)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(5)
-
-        self._title_label = QLabel(title)
-        self._title_label.setStyleSheet("font-size: 16px; color: #555;")
-        self._title_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        self._value_label = QLabel("...")
-        self._value_label.setStyleSheet("font-size: 36px; font-weight: bold; color: #1E90FF;")
-        self.set_value_color("#1E90FF") # Default color
-        self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        main_layout.addWidget(self._title_label)
-        main_layout.addStretch()
-        main_layout.addWidget(self._value_label)
-
-    def set_kpi_value(self, value: str) -> None:
-        """Sets the main display value of the KPI widget."""
-        self._value_label.setText(value)
-
-    def set_value_color(self, color_hex: str) -> None:
-        """Allows customizing the color of the KPI value text."""
-        self._value_label.setStyleSheet(
-            f"font-size: 36px; font-weight: bold; color: {color_hex};"
-        )
-
-```
-
-# app/ui/widgets/managed_table_view.py
-```py
-# File: app/ui/widgets/managed_table_view.py
-"""
-A custom widget that manages the display state of a QTableView,
-providing user-friendly loading and empty-state messages.
-"""
-from __future__ import annotations
-from typing import Optional
-
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTableView, QLabel, QStackedLayout, QSizePolicy
-)
-from PySide6.QtCore import Qt, QAbstractItemModel
-
-class ManagedTableView(QWidget):
-    """
-    A container widget that wraps a QTableView and provides methods to switch
-    between a loading state, an empty state, and the table view itself.
-    This promotes a consistent user experience for all data tables.
-    """
-    def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__(parent)
-
-        self._table_view = QTableView()
-        self._loading_widget = self._create_state_widget("Loading data, please wait...")
-        self._empty_widget = self._create_state_widget("No data available.")
-
-        self._stacked_layout = QStackedLayout()
-        self._stacked_layout.addWidget(self._loading_widget)
-        self._stacked_layout.addWidget(self._empty_widget)
-        self._stacked_layout.addWidget(self._table_view)
-
-        self.setLayout(self._stacked_layout)
-        self.show_loading()
-
-    def _create_state_widget(self, default_text: str) -> QWidget:
-        """Creates a standardized, centered widget for displaying state messages."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.addStretch()
-        
-        label = QLabel(default_text)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("QLabel { color: #888; font-size: 16px; }")
-        
-        layout.addWidget(label)
-        layout.addStretch()
-        widget.setLayout(layout)
-        return widget
-
-    def table(self) -> QTableView:
-        """
-        Provides direct access to the underlying QTableView instance for configuration
-        (e.g., setting selection behavior, connecting signals).
-        """
-        return self._table_view
-
-    def set_model(self, model: QAbstractItemModel) -> None:
-        """Sets the data model for the underlying table view."""
-        self._table_view.setModel(model)
-
-    def show_loading(self) -> None:
-        """Switches the view to show the loading indicator."""
-        self._stacked_layout.setCurrentWidget(self._loading_widget)
-
-    def show_empty(self, message: str = "No data to display.") -> None:
-        """
-        Switches the view to show the empty-state message.
-        
-        Args:
-            message: The specific message to display (e.g., "No products found.").
-        """
-        # Find the QLabel within the empty_widget to update its text
-        label = self._empty_widget.findChild(QLabel)
-        if label:
-            label.setText(message)
-        self._stacked_layout.setCurrentWidget(self._empty_widget)
-
-    def show_table(self) -> None:
-        """Switches the view to show the data table."""
-        self._stacked_layout.setCurrentWidget(self._table_view)
 
 ```
 
@@ -3882,8 +3179,6 @@ from sqlalchemy.future import select
 from app.core.result import Result, Success, Failure
 from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
-from app.models.user import User
-from app.models.company import Outlet # FIX: Import Outlet model for join
 from app.services.base_service import BaseService
 
 if TYPE_CHECKING:
@@ -3987,42 +3282,6 @@ class InventoryService(BaseService):
                 return Success([row._asdict() for row in result.all()])
         except Exception as e:
             return Failure(f"Database error getting inventory summary: {e}")
-
-    async def get_movements_for_product(self, company_id: UUID, product_id: UUID) -> Result[List[dict], str]:
-        """
-        Retrieves the movement history for a specific product, enriched with user and product details.
-        """
-        try:
-            async with self.core.get_session() as session:
-                # FIX: Use explicit JOINs instead of a text-based subquery for better reliability.
-                stmt = (
-                    select(
-                        StockMovement.id,
-                        StockMovement.product_id,
-                        StockMovement.variant_id,
-                        Product.name.label("product_name"),
-                        Product.sku,
-                        Outlet.name.label("outlet_name"),
-                        StockMovement.movement_type,
-                        StockMovement.quantity_change,
-                        StockMovement.reference_id,
-                        StockMovement.notes,
-                        User.full_name.label("created_by_user_name"),
-                        StockMovement.created_at
-                    )
-                    .join(Product, StockMovement.product_id == Product.id)
-                    .join(Outlet, StockMovement.outlet_id == Outlet.id)
-                    .outerjoin(User, StockMovement.created_by_user_id == User.id)
-                    .where(
-                        StockMovement.company_id == company_id,
-                        StockMovement.product_id == product_id
-                    )
-                    .order_by(StockMovement.created_at.desc())
-                )
-                result = await session.execute(stmt)
-                return Success([row._asdict() for row in result.all()])
-        except Exception as e:
-            return Failure(f"Database error getting stock movements for product: {e}")
 
 ```
 
@@ -4549,14 +3808,14 @@ It primarily uses SQLAlchemy Core for performance-critical aggregation.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Any, Optional
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import uuid
 import sqlalchemy as sa
 from sqlalchemy.sql import func, cast
 
 from app.core.result import Result, Success, Failure
-from app.models import SalesTransaction, SalesTransactionItem, Product, Inventory, PurchaseOrder, PurchaseOrderItem, Customer
+from app.models import SalesTransaction, SalesTransactionItem, Product, Inventory, PurchaseOrder, PurchaseOrderItem
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -4566,61 +3825,6 @@ class ReportService:
 
     def __init__(self, core: "ApplicationCore"):
         self.core = core
-
-    async def get_dashboard_stats_raw_data(self, company_id: uuid.UUID) -> Result[Dict[str, Any], str]:
-        """Fetches raw data points required for the main dashboard KPIs."""
-        try:
-            async with self.core.get_session() as session:
-                today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-                today_end = today_start + timedelta(days=1)
-                
-                month_start = today_start.replace(day=1)
-
-                # 1. Today's Sales
-                sales_stmt = (
-                    sa.select(
-                        func.coalesce(func.sum(SalesTransaction.total_amount), Decimal('0.0')).label("sales"),
-                        func.coalesce(func.count(SalesTransaction.id), 0).label("transactions")
-                    ).where(
-                        SalesTransaction.company_id == company_id,
-                        SalesTransaction.transaction_date >= today_start,
-                        SalesTransaction.transaction_date < today_end,
-                        SalesTransaction.status == 'COMPLETED'
-                    )
-                )
-                sales_res = (await session.execute(sales_stmt)).one()
-
-                # 2. New Customers This Month
-                customer_stmt = (
-                    sa.select(func.coalesce(func.count(Customer.id), 0))
-                    .where(
-                        Customer.company_id == company_id,
-                        Customer.created_at >= month_start
-                    )
-                )
-                customer_res = (await session.execute(customer_stmt)).scalar()
-
-                # 3. Low Stock Items
-                low_stock_stmt = (
-                    sa.select(func.coalesce(func.count(Product.id), 0))
-                    .join(Inventory, Product.id == Inventory.product_id)
-                    .where(
-                        Product.company_id == company_id,
-                        Product.track_inventory == True,
-                        Inventory.quantity_on_hand <= Product.reorder_point
-                    )
-                )
-                low_stock_res = (await session.execute(low_stock_stmt)).scalar()
-
-                return Success({
-                    "total_sales_today": sales_res.sales,
-                    "transaction_count_today": sales_res.transactions,
-                    "new_customers_this_month": customer_res,
-                    "low_stock_item_count": low_stock_res
-                })
-
-        except Exception as e:
-            return Failure(f"Database error fetching dashboard stats: {e}")
 
     async def get_sales_summary_raw_data(self, company_id: uuid.UUID, start_date: date, end_date: date) -> Result[List[Dict[str, Any]], str]:
         """Fetches aggregated sales data grouped by day."""
@@ -5164,7 +4368,6 @@ if TYPE_CHECKING:
     from app.business_logic.managers.customer_manager import CustomerManager
     from app.business_logic.managers.inventory_manager import InventoryManager
     from app.business_logic.managers.sales_manager import SalesManager
-    from app.business_logic.managers.payment_manager import PaymentMethodManager
     from app.business_logic.managers.gst_manager import GstManager
     from app.business_logic.managers.reporting_manager import ReportingManager
     from app.business_logic.managers.user_manager import UserManager
@@ -5403,13 +4606,6 @@ class ApplicationCore:
         return self._managers["inventory"]
 
     @property
-    def payment_method_manager(self) -> "PaymentMethodManager":
-        if "payment_method_manager" not in self._managers:
-            from app.business_logic.managers.payment_manager import PaymentMethodManager
-            self._managers["payment_method_manager"] = PaymentMethodManager(self)
-        return self._managers["payment_method_manager"]
-
-    @property
     def sales_manager(self) -> "SalesManager":
         if "sales" not in self._managers:
             from app.business_logic.managers.sales_manager import SalesManager
@@ -5446,7 +4642,7 @@ from app.models.base import Base, TimestampMixin
 class Customer(Base, TimestampMixin):
     __tablename__ = "customers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
     customer_code = Column(String(50), nullable=False)
     name = Column(String(255), nullable=False)
     email = Column(String(255))
@@ -5528,8 +4724,8 @@ from app.models.base import Base, TimestampMixin
 class Category(Base, TimestampMixin):
     __tablename__ = "categories"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(255), nullable=False)
     company = relationship("Company")
     products = relationship("Product", back_populates="category")
@@ -5539,7 +4735,7 @@ class Category(Base, TimestampMixin):
 class Supplier(Base, TimestampMixin):
     __tablename__ = "suppliers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     contact_person = Column(String(255))
     email = Column(String(255))
@@ -5554,16 +4750,16 @@ class Supplier(Base, TimestampMixin):
 class Product(Base, TimestampMixin):
     __tablename__ = "products"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True, index=True)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.categories.id"), nullable=True, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=True, index=True)
     sku = Column(String(100), nullable=False)
     barcode = Column(String(100), index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     cost_price = Column(Numeric(19, 4), nullable=False, default=0)
     selling_price = Column(Numeric(19, 4), nullable=False)
-    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("9.00"))
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=Decimal("9.00")) # FIX: Updated GST Rate
     track_inventory = Column(Boolean, nullable=False, default=True)
     reorder_point = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -5580,7 +4776,7 @@ class Product(Base, TimestampMixin):
 class ProductVariant(Base, TimestampMixin):
     __tablename__ = "product_variants"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="CASCADE"), nullable=False, index=True)
     sku_suffix = Column(String(100), nullable=False)
     barcode = Column(String(100))
     attributes = Column(JSONB, nullable=False)
@@ -5603,7 +4799,6 @@ class ProductVariant(Base, TimestampMixin):
 Defines the base for all SQLAlchemy ORM models.
 Includes a mixin for common timestamp columns.
 """
-import os
 from datetime import datetime
 from sqlalchemy import MetaData, Column, DateTime
 from sqlalchemy.orm import declarative_base
@@ -5619,16 +4814,9 @@ convention = {
     "pk": "pk_%(table_name)s"
 }
 
-# FIX: Conditionally set the schema based on a test environment variable.
-# This allows the same models to work with PostgreSQL (with schema) and
-# SQLite (without schema) during tests.
-schema = "sgpos"
-if os.environ.get("SGPOS_TEST_MODE") == "1":
-    schema = None
-
 # IMPORTANT: Specify the schema here. All tables defined using this Base will
-# automatically belong to the 'sgpos' schema in production.
-metadata = MetaData(naming_convention=convention, schema=schema)
+# automatically belong to the 'sgpos' schema.
+metadata = MetaData(naming_convention=convention, schema="sgpos")
 Base = declarative_base(metadata=metadata)
 
 class TimestampMixin:
@@ -5699,7 +4887,7 @@ class Outlet(Base, TimestampMixin):
     __tablename__ = "outlets"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the outlet")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
     code = Column(String(50), nullable=False, doc="Unique code for the outlet within the company")
     name = Column(String(255), nullable=False, doc="Name of the outlet")
     address = Column(Text, doc="Physical address of the outlet")
@@ -5734,11 +4922,11 @@ from app.models.base import Base, TimestampMixin
 class ChartOfAccount(Base, TimestampMixin):
     __tablename__ = "chart_of_accounts"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
     account_code = Column(String(20), nullable=False)
     account_name = Column(String(255), nullable=False)
     account_type = Column(String(50), nullable=False)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("chart_of_accounts.id"))
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.chart_of_accounts.id"))
     is_active = Column(Boolean, nullable=False, default=True)
     company = relationship("Company", back_populates="chart_of_accounts")
     parent_account = relationship("ChartOfAccount", remote_side=[id], backref="children_accounts")
@@ -5748,22 +4936,23 @@ class ChartOfAccount(Base, TimestampMixin):
 class JournalEntry(Base, TimestampMixin):
     __tablename__ = "journal_entries"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
     entry_number = Column(String(50), nullable=False)
     entry_date = Column(Date, nullable=False)
     description = Column(Text)
     reference_type = Column(String(50))
     reference_id = Column(UUID(as_uuid=True))
     status = Column(String(20), nullable=False, default='POSTED')
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=False, index=True)
     company = relationship("Company", back_populates="journal_entries")
     created_by_user = relationship("User", back_populates="journal_entries_created")
     journal_entry_lines = relationship("JournalEntryLine", back_populates="journal_entry", cascade="all, delete-orphan")
+    # FIX: Corrected foreign_keys and primaryjoin syntax
     sales_transaction = relationship(
         "SalesTransaction",
         primaryjoin="and_(foreign(JournalEntry.reference_id) == SalesTransaction.id, JournalEntry.reference_type == 'SALE')",
         back_populates="journal_entries",
-        uselist=False,
+        uselist=False, # A journal entry can only link to one sale
         viewonly=True
     )
     __table_args__ = (sa.UniqueConstraint('company_id', 'entry_number', name='uq_journal_entry_company_number'), sa.CheckConstraint("status IN ('DRAFT', 'POSTED', 'VOID')", name="chk_journal_entry_status"))
@@ -5771,8 +4960,8 @@ class JournalEntry(Base, TimestampMixin):
 class JournalEntryLine(Base, TimestampMixin):
     __tablename__ = "journal_entry_lines"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    journal_entry_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
-    account_id = Column(UUID(as_uuid=True), ForeignKey("chart_of_accounts.id"), nullable=False, index=True)
+    journal_entry_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.chart_of_accounts.id"), nullable=False, index=True)
     debit_amount = Column(Numeric(19, 2), nullable=False, default=0)
     credit_amount = Column(Numeric(19, 2), nullable=False, default=0)
     description = Column(Text)
@@ -5794,17 +4983,16 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, TimestampMixin
-from app.business_logic.dto.sales_dto import SalesTransactionStatus
 
 class SalesTransaction(Base, TimestampMixin):
     __tablename__ = "sales_transactions"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
     transaction_number = Column(String(50), nullable=False)
     transaction_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True, index=True)
-    cashier_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.customers.id"), nullable=True, index=True)
+    cashier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=False, index=True)
     subtotal = Column(Numeric(19, 2), nullable=False)
     tax_amount = Column(Numeric(19, 2), nullable=False)
     discount_amount = Column(Numeric(19, 2), nullable=False, default=0)
@@ -5818,21 +5006,21 @@ class SalesTransaction(Base, TimestampMixin):
     cashier = relationship("User", back_populates="sales_transactions")
     items = relationship("SalesTransactionItem", back_populates="sales_transaction", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="sales_transaction", cascade="all, delete-orphan")
+    # FIX: Add explicit primaryjoin to tell SQLAlchemy how to link this to JournalEntry
     journal_entries = relationship(
         "JournalEntry",
         primaryjoin="and_(SalesTransaction.id == foreign(JournalEntry.reference_id), JournalEntry.reference_type == 'SALE')",
         back_populates="sales_transaction",
-        viewonly=True
+        viewonly=True  # Usually a good idea for such reverse relationships to prevent accidental modifications
     )
-    # FIX: Corrected f-string syntax for CHECK constraint
-    __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint(f"status IN ({', '.join(f"'{member.value}'" for member in SalesTransactionStatus)})", name="chk_sales_transaction_status"))
+    __table_args__ = (sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'), sa.CheckConstraint("status IN ('COMPLETED', 'VOIDED', 'HELD')", name="chk_sales_transaction_status"))
 
 class SalesTransactionItem(Base):
     __tablename__ = "sales_transaction_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
+    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
     quantity = Column(Numeric(15, 4), nullable=False)
     unit_price = Column(Numeric(19, 4), nullable=False)
     cost_price = Column(Numeric(19, 4), nullable=False)
@@ -5845,7 +5033,7 @@ class SalesTransactionItem(Base):
 class PaymentMethod(Base, TimestampMixin):
     __tablename__ = "payment_methods"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(50), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -5856,8 +5044,8 @@ class PaymentMethod(Base, TimestampMixin):
 class Payment(Base):
     __tablename__ = "payments"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
-    payment_method_id = Column(UUID(as_uuid=True), ForeignKey("payment_methods.id"), nullable=False, index=True)
+    sales_transaction_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.sales_transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    payment_method_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.payment_methods.id"), nullable=False, index=True)
     amount = Column(Numeric(19, 2), nullable=False)
     reference_number = Column(String(100))
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -5876,16 +5064,14 @@ import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, DateTime, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-
 from app.models.base import Base, TimestampMixin
-from app.business_logic.dto.inventory_dto import StockMovementType, PurchaseOrderStatus
 
 class Inventory(Base, TimestampMixin):
     __tablename__ = "inventory"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id", ondelete="RESTRICT"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="RESTRICT"), nullable=True, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="RESTRICT"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id", ondelete="RESTRICT"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id", ondelete="RESTRICT"), nullable=True, index=True)
     quantity_on_hand = Column(Numeric(15, 4), nullable=False, default=0)
     outlet = relationship("Outlet", back_populates="inventory_items")
     product = relationship("Product", back_populates="inventory_items")
@@ -5895,31 +5081,30 @@ class Inventory(Base, TimestampMixin):
 class StockMovement(Base):
     __tablename__ = "stock_movements"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
     movement_type = Column(String(50), nullable=False)
     quantity_change = Column(Numeric(15, 4), nullable=False)
     reference_id = Column(UUID(as_uuid=True))
     reference_type = Column(String(50)) # Added reference_type from schema
     notes = Column(Text)
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     company = relationship("Company", back_populates="stock_movements")
     outlet = relationship("Outlet", back_populates="stock_movements")
     product = relationship("Product", back_populates="stock_movements")
     variant = relationship("ProductVariant", back_populates="stock_movements")
     user = relationship("User", back_populates="stock_movements_created")
-    # FIX: Corrected f-string syntax for CHECK constraint
-    __table_args__ = (sa.CheckConstraint(f"movement_type IN ({', '.join(f"'{member.value}'" for member in StockMovementType)})", name="chk_stock_movement_type"),)
+    __table_args__ = (sa.CheckConstraint("movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')", name="chk_stock_movement_type"),)
 
 class PurchaseOrder(Base, TimestampMixin):
     __tablename__ = "purchase_orders"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id"), nullable=False, index=True)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), nullable=False, index=True)
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id"), nullable=False, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.suppliers.id"), nullable=False, index=True)
     po_number = Column(String(50), nullable=False)
     order_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     expected_delivery_date = Column(DateTime(timezone=True))
@@ -5929,15 +5114,14 @@ class PurchaseOrder(Base, TimestampMixin):
     outlet = relationship("Outlet", back_populates="purchase_orders")
     supplier = relationship("Supplier", back_populates="purchase_orders")
     items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
-    # FIX: Corrected f-string syntax for CHECK constraint
-    __table_args__ = (sa.UniqueConstraint('company_id', 'po_number', name='uq_purchase_order_company_po_number'), sa.CheckConstraint(f"status IN ({', '.join(f"'{member.value}'" for member in PurchaseOrderStatus)})", name="chk_purchase_order_status"))
+    __table_args__ = (sa.UniqueConstraint('company_id', 'po_number', name='uq_purchase_order_company_po_number'), sa.CheckConstraint("status IN ('DRAFT', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')", name="chk_purchase_order_status"))
 
 class PurchaseOrderItem(Base, TimestampMixin):
     __tablename__ = "purchase_order_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    purchase_order_id = Column(UUID(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True, index=True)
+    purchase_order_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.products.id"), nullable=False, index=True)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.product_variants.id"), nullable=True, index=True)
     quantity_ordered = Column(Numeric(15, 4), nullable=False)
     quantity_received = Column(Numeric(15, 4), nullable=False, default=0)
     unit_cost = Column(Numeric(19, 4), nullable=False)
@@ -5954,7 +5138,7 @@ class PurchaseOrderItem(Base, TimestampMixin):
 """SQLAlchemy models for User, Role, and Permission entities."""
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List # Import List for type hinting
 import sqlalchemy as sa
 from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -5967,7 +5151,7 @@ class User(Base, TimestampMixin):
     __tablename__ = "users"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the user")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, index=True, doc="Foreign key to the owning company")
     username = Column(String(100), nullable=False, doc="Unique username for login")
     email = Column(String(255), nullable=False, doc="User's email address")
     password_hash = Column(String(255), nullable=False, doc="Hashed password using bcrypt")
@@ -5998,7 +5182,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, doc="Unique identifier for the role")
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, doc="Foreign key to the owning company")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id", ondelete="RESTRICT"), nullable=False, doc="Foreign key to the owning company")
     name = Column(String(50), nullable=False, doc="Name of the role (unique per company)")
     description = Column(Text, doc="Description of the role's responsibilities")
     is_system_role = Column(Boolean, nullable=False, default=False, doc="True for built-in roles that cannot be deleted or modified by users")
@@ -6032,8 +5216,8 @@ class RolePermission(Base):
     """Junction table linking roles to their permissions."""
     __tablename__ = "role_permissions"
 
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
-    permission_id = Column(UUID(as_uuid=True), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the permission")
+    role_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
+    permission_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.permissions.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the permission")
 
     # Relationships
     role = relationship("Role", back_populates="role_permissions", doc="The role associated with this permission")
@@ -6043,9 +5227,9 @@ class UserRole(Base):
     """Assigns roles to users, potentially on a per-outlet basis."""
     __tablename__ = "user_roles"
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the user")
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
-    outlet_id = Column(UUID(as_uuid=True), ForeignKey("outlets.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the assigned outlet (part of composite PK)")
+    user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the user")
+    role_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.roles.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the role")
+    outlet_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.outlets.id", ondelete="CASCADE"), primary_key=True, doc="Foreign key to the assigned outlet (part of composite PK)")
 
     # Relationships
     user = relationship("User", back_populates="user_roles", doc="The user assigned to this role")
@@ -6069,8 +5253,8 @@ from app.models.base import Base
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(BigInteger, primary_key=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.companies.id"), index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("sgpos.users.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(50), nullable=False)
     table_name = Column(String(100), nullable=False)
     record_id = Column(UUID(as_uuid=True), nullable=False)
@@ -6200,11 +5384,12 @@ class InventoryManager(BaseManager):
                 new_po = PurchaseOrder(
                     company_id=dto.company_id, outlet_id=dto.outlet_id, supplier_id=dto.supplier_id, po_number=po_number,
                     order_date=dto.order_date, expected_delivery_date=dto.expected_delivery_date, notes=dto.notes,
-                    total_amount=po_total_amount.quantize(Decimal("0.01")), items=po_items, status='SENT'
+                    total_amount=po_total_amount.quantize(Decimal("0.01")), items=po_items
                 )
                 save_po_result = await self.purchase_order_service.create_full_purchase_order(new_po, session)
                 if isinstance(save_po_result, Failure): raise Exception(save_po_result.error)
 
+                # The PurchaseOrder model does not have the supplier name, so we must use the one we fetched
                 return await self._create_po_dto(save_po_result.value, supplier_result.value.name)
         except Exception as e:
             return Failure(f"Failed to create purchase order: {e}")
@@ -6255,33 +5440,32 @@ class InventoryManager(BaseManager):
     
     async def get_all_purchase_orders(self, company_id: UUID, outlet_id: Optional[UUID] = None) -> Result[List[PurchaseOrderDTO], str]:
         """Retrieves all purchase orders for a given company, optionally filtered by outlet."""
+        # FIX: Call the new, optimized service method instead of the generic one.
         po_results = await self.purchase_order_service.get_all_with_supplier(company_id, outlet_id)
         if isinstance(po_results, Failure):
             return po_results
 
         po_dtos: List[PurchaseOrderDTO] = []
         for po in po_results.value:
+            # FIX: The supplier object is now eager-loaded. No more N+1 query.
             supplier_name = po.supplier.name if po.supplier else "Unknown Supplier"
             po_dto_res = await self._create_po_dto(po, supplier_name)
             if isinstance(po_dto_res, Success):
                 po_dtos.append(po_dto_res.value)
         return Success(po_dtos)
         
-    async def get_stock_movements_for_product(self, company_id: UUID, product_id: UUID) -> Result[List[StockMovementDTO], str]:
-        """
-        Retrieves the movement history for a specific product.
-        """
-        result = await self.inventory_service.get_movements_for_product(company_id, product_id)
-        if isinstance(result, Failure):
-            return result
-        
-        # Convert raw dicts from the service into strongly-typed DTOs
-        return Success([StockMovementDTO(**row) for row in result.value])
-
     async def _create_po_dto(self, po: PurchaseOrder, supplier_name: str) -> Result[PurchaseOrderDTO, str]:
         """Helper to construct a PurchaseOrderDTO from an ORM object."""
+        # This helper must be fast as it can be called in a loop.
+        # Fetch all product details for all items in one query if possible.
+        # For now, we assume po.items is already loaded or we fetch them.
+        # If po.items isn't loaded, this would be another N+1, but the PO view doesn't show items yet.
+        # Let's assume for DTO creation, items might not be fully detailed yet unless needed.
+        # The `create_purchase_order` method already has `po.items` loaded.
+        # The `get_all_purchase_orders` does not yet load items, which is fine for the current PO list view.
+        
         items_dto: List[PurchaseOrderItemDTO] = []
-        if po.items:
+        if po.items: # Check if items are loaded
             product_ids = [item.product_id for item in po.items]
             products_res = await self.product_service.get_by_ids(product_ids)
             if isinstance(products_res, Failure): return products_res
@@ -6289,7 +5473,7 @@ class InventoryManager(BaseManager):
 
             for item in po.items:
                 product = products_map.get(item.product_id)
-                if not product: continue
+                if not product: continue # Should not happen if data is consistent
 
                 items_dto.append(
                     PurchaseOrderItemDTO(
@@ -6423,7 +5607,6 @@ from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.sales_dto import SaleCreateDTO, FinalizedSaleDTO, SalesTransactionItemDTO
 from app.models.sales import SalesTransaction, SalesTransactionItem, Payment
 from app.models.inventory import StockMovement
-from app.models.product import Product
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -6490,9 +5673,7 @@ class SalesManager(BaseManager):
                 "unit_price": unit_price,
                 "cost_price": product.cost_price,
                 "line_total": line_subtotal,
-                "gst_rate": product.gst_rate,
-                # FIX: Propagate the full product object for subsequent steps like inventory deduction.
-                "product": product
+                "gst_rate": product.gst_rate
             })
 
         total_amount = subtotal + tax_amount
@@ -6512,43 +5693,43 @@ class SalesManager(BaseManager):
         Returns:
             A Success with a FinalizedSaleDTO, or a Failure with an error message.
         """
+        # --- 1. Pre-computation & Validation Phase (before database transaction) ---
+        total_payment = sum(p.amount for p in dto.payments).quantize(Decimal("0.01"))
+        
+        # Fetch all product details in one go for efficiency
+        product_ids = [item.product_id for item in dto.cart_items]
+        fetched_products_result = await self.product_service.get_by_ids(product_ids)
+        if isinstance(fetched_products_result, Failure):
+            return fetched_products_result
+        
+        products_map = {p.id: p for p in fetched_products_result.value}
+        if len(products_map) != len(product_ids):
+            return Failure("One or more products in the cart could not be found.")
+
+        # Prepare detailed cart items for calculation
+        detailed_cart_items = []
+        for item_dto in dto.cart_items:
+            detailed_cart_items.append({
+                "product": products_map[item_dto.product_id],
+                "quantity": item_dto.quantity,
+                "unit_price_override": item_dto.unit_price_override,
+                "variant_id": item_dto.variant_id
+            })
+
+        totals_result = await self._calculate_totals(detailed_cart_items)
+        if isinstance(totals_result, Failure):
+            return totals_result
+        
+        calculated_totals = totals_result.value
+        total_amount_due = calculated_totals["total_amount"]
+
+        if total_payment < total_amount_due:
+            return Failure(f"Payment amount (S${total_payment:.2f}) is less than the total amount due (S${total_amount_due:.2f}).")
+
+        change_due = (total_payment - total_amount_due).quantize(Decimal("0.01"))
+        
+        # --- 2. Orchestration within a single atomic transaction ---
         try:
-            # --- 1. Pre-computation & Validation Phase (before database transaction) ---
-            total_payment = sum(p.amount for p in dto.payments).quantize(Decimal("0.01"))
-            
-            # Fetch all product details in one go for efficiency
-            product_ids = [item.product_id for item in dto.cart_items]
-            fetched_products_result = await self.product_service.get_by_ids(product_ids)
-            if isinstance(fetched_products_result, Failure):
-                return fetched_products_result
-            
-            products_map = {p.id: p for p in fetched_products_result.value}
-            if len(products_map) != len(product_ids):
-                return Failure("One or more products in the cart could not be found.")
-
-            # Prepare detailed cart items for calculation
-            detailed_cart_items = []
-            for item_dto in dto.cart_items:
-                detailed_cart_items.append({
-                    "product": products_map[item_dto.product_id],
-                    "quantity": item_dto.quantity,
-                    "unit_price_override": item_dto.unit_price_override,
-                    "variant_id": item_dto.variant_id
-                })
-
-            totals_result = await self._calculate_totals(detailed_cart_items)
-            if isinstance(totals_result, Failure):
-                return totals_result
-            
-            calculated_totals = totals_result.value
-            total_amount_due = calculated_totals["total_amount"]
-
-            if total_payment < total_amount_due:
-                return Failure(f"Payment amount (S${total_payment:.2f}) is less than the total amount due (S${total_amount_due:.2f}).")
-
-            change_due = (total_payment - total_amount_due).quantize(Decimal("0.01"))
-            
-            # --- 2. Orchestration within a single atomic transaction ---
             async with self.core.get_session() as session:
                 # 2a. Deduct inventory and get stock movement objects
                 inventory_deduction_result = await self.inventory_manager.deduct_stock_for_sale(
@@ -6565,7 +5746,7 @@ class SalesManager(BaseManager):
                     company_id=dto.company_id, outlet_id=dto.outlet_id, cashier_id=dto.cashier_id,
                     customer_id=dto.customer_id, transaction_number=transaction_number,
                     subtotal=calculated_totals["subtotal"], tax_amount=calculated_totals["tax_amount"],
-                    total_amount=total_amount_due, notes=dto.notes, status="COMPLETED"
+                    total_amount=total_amount_due, notes=dto.notes
                 )
                 
                 # 2c. Construct line items and payments
@@ -6585,7 +5766,7 @@ class SalesManager(BaseManager):
                 
                 # 2f. Update loyalty points if applicable
                 if dto.customer_id:
-                    loyalty_result = await self.customer_manager.add_loyalty_points_for_sale(dto.customer_id, saved_sale.total_amount, session)
+                    loyalty_result = await self.customer_manager.add_loyalty_points_for_sale(dto.customer_id, saved_sale.total_amount)
                     if isinstance(loyalty_result, Failure):
                         print(f"WARNING: Failed to update loyalty points for customer {dto.customer_id}: {loyalty_result.error}")
 
@@ -6609,103 +5790,7 @@ class SalesManager(BaseManager):
                 )
                 return Success(finalized_dto)
         except Exception as e:
-            # Capture the raw exception to understand the KeyError
             return Failure(f"A critical error occurred while finalizing the sale: {e}")
-
-```
-
-# app/business_logic/managers/payment_manager.py
-```py
-# File: app/business_logic/managers/payment_manager.py
-"""Business Logic Manager for Payment Method operations."""
-from __future__ import annotations
-from typing import TYPE_CHECKING, List
-from uuid import UUID
-
-from app.core.result import Result, Success, Failure
-from app.business_logic.managers.base_manager import BaseManager
-from app.business_logic.dto.payment_dto import PaymentMethodDTO, PaymentMethodCreateDTO, PaymentMethodUpdateDTO
-from app.models.sales import PaymentMethod
-
-if TYPE_CHECKING:
-    from app.core.application_core import ApplicationCore
-    from app.services.payment_service import PaymentMethodService
-
-class PaymentMethodManager(BaseManager):
-    """Orchestrates business logic for payment methods."""
-
-    @property
-    def payment_method_service(self) -> "PaymentMethodService":
-        return self.core.payment_method_service
-
-    async def get_all_payment_methods(self, company_id: UUID) -> Result[List[PaymentMethodDTO], str]:
-        """Retrieves all payment methods for a given company, sorted by name."""
-        result = await self.payment_method_service.get_all(company_id, order_by_column='name')
-        if isinstance(result, Failure):
-            return result
-        return Success([PaymentMethodDTO.from_orm(pm) for pm in result.value])
-
-    async def create_payment_method(self, company_id: UUID, dto: PaymentMethodCreateDTO) -> Result[PaymentMethodDTO, str]:
-        """Creates a new payment method after validating business rules."""
-        # Business rule: Check for duplicate name
-        existing_result = await self.payment_method_service.get_by_name(company_id, dto.name)
-        if isinstance(existing_result, Failure):
-            return existing_result
-        if existing_result.value:
-            return Failure(f"A payment method with the name '{dto.name}' already exists.")
-
-        new_method = PaymentMethod(company_id=company_id, **dto.dict())
-        
-        create_result = await self.payment_method_service.create(new_method)
-        if isinstance(create_result, Failure):
-            return create_result
-
-        return Success(PaymentMethodDTO.from_orm(create_result.value))
-
-    async def update_payment_method(self, method_id: UUID, dto: PaymentMethodUpdateDTO) -> Result[PaymentMethodDTO, str]:
-        """Updates an existing payment method."""
-        method_result = await self.payment_method_service.get_by_id(method_id)
-        if isinstance(method_result, Failure):
-            return method_result
-        
-        method = method_result.value
-        if not method:
-            return Failure(f"Payment method with ID {method_id} not found.")
-
-        # Business rule: If name is changed, check for duplication.
-        if dto.name != method.name:
-            existing_result = await self.payment_method_service.get_by_name(method.company_id, dto.name)
-            if isinstance(existing_result, Failure):
-                return existing_result
-            if existing_result.value and existing_result.value.id != method_id:
-                return Failure(f"Another payment method with the name '{dto.name}' already exists.")
-        
-        # Update fields from DTO
-        for field, value in dto.dict(exclude_unset=True).items():
-            setattr(method, field, value)
-
-        update_result = await self.payment_method_service.update(method)
-        if isinstance(update_result, Failure):
-            return update_result
-        
-        return Success(PaymentMethodDTO.from_orm(update_result.value))
-
-    async def deactivate_payment_method(self, method_id: UUID) -> Result[bool, str]:
-        """Deactivates a payment method (soft delete)."""
-        method_result = await self.payment_method_service.get_by_id(method_id)
-        if isinstance(method_result, Failure):
-            return method_result
-        
-        method = method_result.value
-        if not method:
-            return Failure("Payment method not found.")
-        
-        method.is_active = False
-        update_result = await self.payment_method_service.update(method)
-        if isinstance(update_result, Failure):
-            return update_result
-        
-        return Success(True)
 
 ```
 
@@ -6981,8 +6066,6 @@ from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.user_dto import UserDTO, UserCreateDTO, UserUpdateDTO, RoleDTO
 from app.models import User, Role, UserRole
 from sqlalchemy.orm import selectinload
-# FIX: Add missing 'select' import from sqlalchemy
-from sqlalchemy import select
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
@@ -7015,9 +6098,12 @@ class UserManager(BaseManager):
         try:
             async with self.core.get_session() as session:
                 session.add(new_user)
-                await session.flush()
+                await session.flush()  # Ensures new_user.id is available
 
+                # FIX: Implement role assignment logic
                 for role_id in dto.roles:
+                    # TODO: For multi-outlet scenarios, the DTO should specify the outlet.
+                    # For now, we assign the role for the currently active outlet.
                     user_role = UserRole(
                         user_id=new_user.id,
                         role_id=role_id,
@@ -7035,6 +6121,7 @@ class UserManager(BaseManager):
         """Updates an existing user's details, password, and roles."""
         async with self.core.get_session() as session:
             try:
+                # Use selectinload to fetch user with roles efficiently
                 stmt = select(User).where(User.id == user_id).options(selectinload(User.user_roles))
                 result = await session.execute(stmt)
                 user = result.scalar_one_or_none()
@@ -7042,31 +6129,26 @@ class UserManager(BaseManager):
                 if not user:
                     return Failure("User not found.")
 
+                # Update basic user fields
                 update_data = dto.dict(exclude_unset=True, exclude={'password', 'roles'})
                 for key, value in update_data.items():
                     setattr(user, key, value)
                 
+                # Update password if provided
                 if dto.password:
                     user.password_hash = self._hash_password(dto.password)
 
-                # FIX: More efficient and atomic role update logic
-                existing_role_map = {ur.role_id: ur for ur in user.user_roles}
-                target_role_ids = set(dto.roles)
-                
-                # Remove roles that are no longer assigned
-                roles_to_remove = [user_role for role_id, user_role in existing_role_map.items() if role_id not in target_role_ids]
-                for user_role in roles_to_remove:
-                    await session.delete(user_role)
+                # Update roles: clear existing roles and add new ones
+                user.user_roles.clear()
+                await session.flush()
 
-                # Add new roles
-                for role_id in target_role_ids:
-                    if role_id not in existing_role_map:
-                        new_assignment = UserRole(
-                            user_id=user.id,
-                            role_id=role_id,
-                            outlet_id=self.core.current_outlet_id 
-                        )
-                        session.add(new_assignment)
+                for role_id in dto.roles:
+                    user_role = UserRole(
+                        user_id=user.id,
+                        role_id=role_id,
+                        outlet_id=self.core.current_outlet_id # Assumes update is for current context
+                    )
+                    session.add(user_role)
                 
                 await session.flush()
                 await session.refresh(user, attribute_names=['user_roles'])
@@ -7108,10 +6190,9 @@ class UserManager(BaseManager):
 # File: app/business_logic/managers/customer_manager.py
 """Business Logic Manager for Customer operations."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Optional, AsyncIterator
+from typing import TYPE_CHECKING, List
 from uuid import UUID
 from decimal import Decimal
-from contextlib import asynccontextmanager
 
 from app.core.result import Result, Success, Failure
 from app.business_logic.managers.base_manager import BaseManager
@@ -7121,7 +6202,6 @@ from app.models.customer import Customer # Import the ORM model
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
     from app.services.customer_service import CustomerService
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 class CustomerManager(BaseManager):
     """Orchestrates business logic for customers."""
@@ -7136,12 +6216,14 @@ class CustomerManager(BaseManager):
         Creates a new customer.
         Business rule: Customer code and email must be unique for the company.
         """
+        # Business rule: Check for duplicate customer code
         existing_result = await self.customer_service.get_by_code(company_id, dto.customer_code)
         if isinstance(existing_result, Failure):
-            return existing_result
+            return existing_result # Propagate database error
         if existing_result.value is not None:
             return Failure(f"Business Rule Error: Customer with code '{dto.customer_code}' already exists.")
 
+        # Business rule: If email is provided, check for duplicate email
         if dto.email:
             email_check_result = await self.customer_service.get_by_email(company_id, dto.email)
             if isinstance(email_check_result, Failure):
@@ -7235,41 +6317,35 @@ class CustomerManager(BaseManager):
         
         return Success(True)
 
-    async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal, session: Optional["AsyncSession"] = None) -> Result[int, str]:
+    async def add_loyalty_points_for_sale(self, customer_id: UUID, sale_total: Decimal) -> Result[int, str]:
         """
         Calculates and adds loyalty points for a completed sale.
-        This method is designed to be called from within an existing transaction (like a sale)
-        by passing the session, or as a standalone operation.
+        Business Rule: 1 point for every S$10 spent (configurable in a future settings module).
         """
         loyalty_rate = Decimal("10.00")
         points_to_add = int(sale_total // loyalty_rate)
         
         if points_to_add <= 0:
             return Success(0)
-        
-        # FIX: Define the core logic in a separate async function.
-        async def _core_logic(update_session: "AsyncSession") -> Result[int, str]:
-            try:
-                # The service methods should ideally accept a session.
-                # As a workaround for now, we can use the session directly to get and update the object.
-                customer = await update_session.get(Customer, customer_id)
-                if not customer:
-                    return Failure(f"Customer with ID {customer_id} not found.")
+
+        try:
+            async with self.core.get_session() as session:
+                customer_result = await self.customer_service.get_by_id(customer_id)
+                if isinstance(customer_result, Failure): return customer_result
+                
+                customer = customer_result.value
+                if not customer: return Failure(f"Customer with ID {customer_id} not found.")
                 
                 customer.loyalty_points += points_to_add
+                
+                update_result = await self.customer_service.update(customer)
+                if isinstance(update_result, Failure): return update_result
+                    
+                # TODO: Log the loyalty transaction for auditing
                 return Success(customer.loyalty_points)
-            except Exception as e:
-                return Failure(f"Failed to add loyalty points: {e}")
-
-        # FIX: Use the provided session if it exists, otherwise create a new one.
-        if session:
-            return await _core_logic(session)
-        else:
-            try:
-                async with self.core.get_session() as new_session:
-                    return await _core_logic(new_session)
-            except Exception as e:
-                return Failure(f"Failed to add loyalty points in new session: {e}")
+        except Exception as e:
+            print(f"ERROR: Failed to add loyalty points for customer {customer_id}: {e}")
+            return Failure(f"Failed to add loyalty points: {e}")
 
 ```
 
@@ -7287,7 +6363,7 @@ import uuid
 from app.core.result import Result, Success, Failure
 from app.business_logic.managers.base_manager import BaseManager
 from app.business_logic.dto.reporting_dto import (
-    DashboardStatsDTO, SalesSummaryReportDTO, SalesByPeriodDTO, ProductPerformanceDTO,
+    SalesSummaryReportDTO, SalesByPeriodDTO, ProductPerformanceDTO,
     InventoryValuationReportDTO, InventoryValuationItemDTO, GstReportDTO
 )
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -7306,14 +6382,6 @@ class ReportingManager(BaseManager):
     def report_service(self) -> "ReportService": return self.core.report_service
     @property
     def outlet_service(self) -> "OutletService": return self.core.outlet_service
-
-    async def generate_dashboard_stats(self, company_id: uuid.UUID) -> Result[DashboardStatsDTO, str]:
-        """Generates the aggregated statistics for the main dashboard."""
-        raw_data_result = await self.report_service.get_dashboard_stats_raw_data(company_id)
-        if isinstance(raw_data_result, Failure):
-            return raw_data_result
-        
-        return Success(DashboardStatsDTO(**raw_data_result.value))
 
     async def generate_sales_summary_report(self, company_id: uuid.UUID, start_date: date, end_date: date) -> Result[SalesSummaryReportDTO, str]:
         """Generates a comprehensive sales summary report."""
@@ -7481,6 +6549,7 @@ class ReportingManager(BaseManager):
             writer = csv.writer(f)
             headers = ["SKU", "Product Name", "Qty Sold", "Revenue (S$)", "Margin (S$)", "Margin (%)"]
             writer.writerow(headers)
+            # FIX: Iterate over the correct attribute of the parent DTO
             for p in data.top_performing_products:
                 writer.writerow([p.sku, p.name, f"{p.quantity_sold:.4f}", f"{p.total_revenue:.2f}", f"{p.gross_margin:.2f}", f"{p.gross_margin_percentage:.2f}"])
 
@@ -7493,6 +6562,7 @@ class ReportingManager(BaseManager):
             writer.writerow([])
             headers = ["SKU", "Product Name", "Qty On Hand", "Cost Price (S$)", "Total Value (S$)"]
             writer.writerow(headers)
+            # FIX: Iterate over the correct attribute of the parent DTO
             for i in data.items:
                 writer.writerow([i.sku, i.name, f"{i.quantity_on_hand:.4f}", f"{i.cost_price:.4f}", f"{i.total_value:.2f}"])
 
@@ -7504,7 +6574,7 @@ class ReportingManager(BaseManager):
 """Data Transfer Objects for Company and Outlet operations."""
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 
 class CompanyBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Legal name of the company")
@@ -7521,8 +6591,9 @@ class CompanyUpdateDTO(CompanyBaseDTO):
 class CompanyDTO(CompanyBaseDTO):
     """DTO representing a full company record."""
     id: uuid.UUID
-    
-    model_config = ConfigDict(from_attributes=True)
+
+    class Config:
+        from_attributes = True
 
 class OutletDTO(BaseModel):
     """DTO representing a retail outlet."""
@@ -7530,8 +6601,9 @@ class OutletDTO(BaseModel):
     name: str
     code: str
     is_active: bool
-    
-    model_config = ConfigDict(from_attributes=True)
+
+    class Config:
+        from_attributes = True
 
 ```
 
@@ -7543,25 +6615,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field, ConfigDict
-from enum import Enum
-
-class StockMovementType(str, Enum):
-    SALE = "SALE"
-    RETURN = "RETURN"
-    PURCHASE = "PURCHASE"
-    ADJUSTMENT_IN = "ADJUSTMENT_IN"
-    ADJUSTMENT_OUT = "ADJUSTMENT_OUT"
-    TRANSFER_IN = "TRANSFER_IN"
-    TRANSFER_OUT = "TRANSFER_OUT"
-
-class PurchaseOrderStatus(str, Enum):
-    DRAFT = "DRAFT"
-    SENT = "SENT"
-    PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
-    RECEIVED = "RECEIVED"
-    CANCELLED = "CANCELLED"
-
+from pydantic import BaseModel, Field
 
 # --- Supplier DTOs ---
 class SupplierBaseDTO(BaseModel):
@@ -7580,7 +6634,8 @@ class SupplierUpdateDTO(SupplierBaseDTO):
 
 class SupplierDTO(SupplierBaseDTO):
     id: uuid.UUID
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 # --- Purchase Order DTOs ---
 class PurchaseOrderItemCreateDTO(BaseModel):
@@ -7597,7 +6652,7 @@ class PurchaseOrderCreateDTO(BaseModel):
     order_date: datetime = Field(default_factory=datetime.utcnow)
     expected_delivery_date: Optional[datetime] = None
     notes: Optional[str] = None
-    items: List[PurchaseOrderItemCreateDTO] = Field(..., min_length=1)
+    items: List[PurchaseOrderItemCreateDTO] = Field(..., min_items=1)
 
 class PurchaseOrderItemDTO(BaseModel):
     id: uuid.UUID
@@ -7609,7 +6664,8 @@ class PurchaseOrderItemDTO(BaseModel):
     quantity_received: Decimal = Field(..., decimal_places=4)
     unit_cost: Decimal = Field(..., decimal_places=4)
     line_total: Decimal = Field(..., decimal_places=2)
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 class PurchaseOrderDTO(BaseModel):
     id: uuid.UUID
@@ -7624,7 +6680,8 @@ class PurchaseOrderDTO(BaseModel):
     notes: Optional[str]
     total_amount: Decimal = Field(..., decimal_places=2)
     items: List[PurchaseOrderItemDTO]
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 # --- Stock Adjustment DTO ---
 class StockAdjustmentItemDTO(BaseModel):
@@ -7653,7 +6710,8 @@ class StockMovementDTO(BaseModel):
     notes: Optional[str]
     created_by_user_name: Optional[str]
     created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 # --- Inventory Summary DTO (for InventoryView display) ---
 class InventorySummaryDTO(BaseModel):
@@ -7661,16 +6719,16 @@ class InventorySummaryDTO(BaseModel):
     variant_id: Optional[uuid.UUID] = None
     product_name: str
     sku: str
-    barcode: Optional[str] = None
-    # FIX: Field is now truly optional with a default value
-    category_name: Optional[str] = None
+    barcode: Optional[str]
+    category_name: Optional[str]
     quantity_on_hand: Decimal = Field(..., decimal_places=4)
     reorder_point: int
     is_active: bool
     cost_price: Decimal = Field(..., decimal_places=4)
     selling_price: Decimal = Field(..., decimal_places=4)
     
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 ```
 
@@ -7687,8 +6745,8 @@ Data Transfer Objects (DTOs) for the Product entity.
 """
 import uuid
 from decimal import Decimal
-from typing import Optional, Any
-from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationInfo
+from typing import Optional
+from pydantic import BaseModel, Field, validator
 
 class ProductBaseDTO(BaseModel):
     """Base DTO with common product fields."""
@@ -7697,7 +6755,7 @@ class ProductBaseDTO(BaseModel):
     description: Optional[str] = Field(None, description="Detailed description of the product")
     selling_price: Decimal = Field(..., gt=Decimal("0.00"), decimal_places=4, description="The retail price of the product")
     cost_price: Decimal = Field(..., ge=Decimal("0.00"), decimal_places=4, description="The cost of acquiring the product")
-    gst_rate: Decimal = Field(Decimal("9.00"), ge=Decimal("0.00"), le=Decimal("100.00"), decimal_places=2, description="Goods and Services Tax rate (e.g., 9.00 for 9%)")
+    gst_rate: Decimal = Field(Decimal("9.00"), ge=Decimal("0.00"), le=Decimal("100.00"), decimal_places=2, description="Goods and Services Tax rate (e.g., 9.00 for 9%)") # FIX: Updated GST Rate
     track_inventory: bool = True
     is_active: bool = True
     category_id: Optional[uuid.UUID] = Field(None, description="UUID of the product's category")
@@ -7705,10 +6763,9 @@ class ProductBaseDTO(BaseModel):
     barcode: Optional[str] = Field(None, max_length=100, description="Product barcode (EAN, UPC, etc.)")
     reorder_point: int = Field(0, ge=0, description="Threshold quantity for reordering suggestions")
 
-    @field_validator('selling_price')
-    @classmethod
-    def check_selling_price_not_less_than_cost_price(cls, v: Decimal, info: ValidationInfo) -> Decimal:
-        if info.data and 'cost_price' in info.data and v < info.data['cost_price']:
+    @validator('selling_price')
+    def check_selling_price_not_less_than_cost_price(cls, v, values):
+        if 'cost_price' in values and v < values['cost_price']:
             raise ValueError('Selling price cannot be less than cost price.')
         return v
 
@@ -7724,47 +6781,8 @@ class ProductDTO(ProductBaseDTO):
     """DTO representing a full product record, including its unique ID."""
     id: uuid.UUID = Field(..., description="Unique identifier for the product")
 
-    model_config = ConfigDict(from_attributes=True)
-
-```
-
-# app/business_logic/dto/payment_dto.py
-```py
-# File: app/business_logic/dto/payment_dto.py
-"""Data Transfer Objects for Payment Method operations."""
-import uuid
-from enum import Enum
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
-
-class PaymentMethodType(str, Enum):
-    """Enumeration for the types of payment methods available."""
-    CASH = "CASH"
-    CARD = "CARD"
-    NETS = "NETS"
-    PAYNOW = "PAYNOW"
-    VOUCHER = "VOUCHER"
-    STORE_CREDIT = "STORE_CREDIT"
-
-class PaymentMethodBaseDTO(BaseModel):
-    """Base DTO with common payment method fields."""
-    name: str = Field(..., min_length=2, max_length=100, description="The display name of the payment method")
-    type: PaymentMethodType = Field(..., description="The type of the payment method")
-    is_active: bool = Field(True, description="Indicates if the payment method is currently active and can be used")
-
-class PaymentMethodCreateDTO(PaymentMethodBaseDTO):
-    """DTO for creating a new payment method."""
-    pass
-
-class PaymentMethodUpdateDTO(PaymentMethodBaseDTO):
-    """DTO for updating an existing payment method."""
-    pass
-
-class PaymentMethodDTO(PaymentMethodBaseDTO):
-    """DTO representing a full payment method record for data retrieval."""
-    id: uuid.UUID
-
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 ```
 
@@ -7774,7 +6792,7 @@ class PaymentMethodDTO(PaymentMethodBaseDTO):
 """Data Transfer Objects for User operations."""
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr
 
 class UserBaseDTO(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
@@ -7793,12 +6811,14 @@ class UserUpdateDTO(UserBaseDTO):
 class RoleDTO(BaseModel):
     id: uuid.UUID
     name: str
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 class UserDTO(UserBaseDTO):
     id: uuid.UUID
     roles: List[RoleDTO]
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 ```
 
@@ -7809,16 +6829,8 @@ class UserDTO(UserBaseDTO):
 import uuid
 from decimal import Decimal
 from typing import List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from datetime import datetime
-from enum import Enum
-
-# NEW: Centralized Enum for Sales Transaction Statuses
-class SalesTransactionStatus(str, Enum):
-    COMPLETED = "COMPLETED"
-    VOIDED = "VOIDED"
-    HELD = "HELD"
-
 
 class CartItemDTO(BaseModel):
     """DTO representing an item to be added to a sales transaction."""
@@ -7854,7 +6866,8 @@ class SalesTransactionItemDTO(BaseModel):
     line_total: Decimal = Field(..., decimal_places=2)
     gst_rate: Decimal = Field(..., decimal_places=2)
     
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 class FinalizedSaleDTO(BaseModel):
     """DTO representing a completed sale, suitable for generating a receipt."""
@@ -7888,15 +6901,6 @@ from decimal import Decimal
 from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
-
-# --- Dashboard DTO ---
-
-class DashboardStatsDTO(BaseModel):
-    """DTO for the main dashboard's Key Performance Indicators (KPIs)."""
-    total_sales_today: Decimal = Field(..., decimal_places=2)
-    transaction_count_today: int
-    new_customers_this_month: int
-    low_stock_item_count: int
 
 # --- Sales Report DTOs ---
 
@@ -7979,7 +6983,7 @@ class GstReportDTO(BaseModel):
 import uuid
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr
 
 class CustomerBaseDTO(BaseModel):
     """Base DTO with common customer fields."""
@@ -8005,7 +7009,8 @@ class CustomerDTO(CustomerBaseDTO):
     credit_limit: Decimal = Field(..., ge=0, decimal_places=2, description="Credit limit extended to the customer")
     is_active: bool = True
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 class LoyaltyPointAdjustmentDTO(BaseModel):
     """DTO for manually adjusting a customer's loyalty points."""
@@ -8150,7 +7155,7 @@ if __name__ == "__main__":
 -- File: scripts/database/schema.sql
 -- =============================================================================
 -- SG Point-of-Sale (SG-POS) System - Complete Database Schema
--- Version: 2.2 (Corrected to match ORM Models)
+-- Version: 2.1 (Super-Set Edition with constraint fix)
 -- Database: PostgreSQL 15+
 -- =============================================================================
 
@@ -8176,8 +7181,7 @@ CREATE TABLE companies (
     address TEXT,
     phone VARCHAR(20),
     email VARCHAR(255),
-    -- FIX: Changed CHAR(3) to VARCHAR(3) to perfectly match SQLAlchemy's String(3) mapping.
-    base_currency VARCHAR(3) NOT NULL DEFAULT 'SGD',
+    base_currency VARCHAR(3) NOT NULL DEFAULT 'SGD', -- Corrected from CHAR(3)
     fiscal_year_start DATE,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -8348,8 +7352,6 @@ CREATE TABLE stock_movements (
     movement_type VARCHAR(50) NOT NULL CHECK (movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')),
     quantity_change NUMERIC(15, 4) NOT NULL,
     reference_id UUID,
-    -- FIX: Added missing reference_type column to match the ORM model.
-    reference_type VARCHAR(50),
     notes TEXT,
     created_by_user_id UUID REFERENCES sgpos.users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -8357,9 +7359,8 @@ CREATE TABLE stock_movements (
 COMMENT ON TABLE sgpos.stock_movements IS 'Immutable log of all inventory changes for full auditability.';
 COMMENT ON COLUMN sgpos.stock_movements.quantity_change IS 'Positive for stock in, negative for stock out';
 COMMENT ON COLUMN sgpos.stock_movements.reference_id IS 'e.g., sales_transaction_id, purchase_order_id';
-COMMENT ON COLUMN sgpos.stock_movements.reference_type IS 'e.g., ''SALE'', ''PURCHASE_ORDER''';
 
-
+-- Added Purchase Orders and Purchase Order Items to this section as they are part of inventory management
 CREATE TABLE purchase_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES sgpos.companies(id),
@@ -8381,13 +7382,13 @@ CREATE TABLE purchase_order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     purchase_order_id UUID NOT NULL REFERENCES sgpos.purchase_orders(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES sgpos.products(id),
-    variant_id UUID REFERENCES sgpos.product_variants(id),
+    variant_id UUID REFERENCES sgpos.product_variants(id), -- Added variant_id for PO items if variants are ordered
     quantity_ordered NUMERIC(15, 4) NOT NULL,
     quantity_received NUMERIC(15, 4) NOT NULL DEFAULT 0,
     unit_cost NUMERIC(19, 4) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(purchase_order_id, product_id, variant_id)
+    UNIQUE(purchase_order_id, product_id, variant_id) -- Unique constraint includes variant_id
 );
 COMMENT ON TABLE sgpos.purchase_order_items IS 'A line item within a purchase order.';
 
@@ -8438,12 +7439,12 @@ CREATE TABLE sales_transaction_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sales_transaction_id UUID NOT NULL REFERENCES sgpos.sales_transactions(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES sgpos.products(id),
-    variant_id UUID REFERENCES sgpos.product_variants(id),
+    variant_id UUID REFERENCES sgpos.product_variants(id), -- Added variant_id for sales items
     quantity NUMERIC(15, 4) NOT NULL,
     unit_price NUMERIC(19, 4) NOT NULL,
     cost_price NUMERIC(19, 4) NOT NULL,
     line_total NUMERIC(19, 2) NOT NULL,
-    UNIQUE(sales_transaction_id, product_id, variant_id)
+    UNIQUE(sales_transaction_id, product_id, variant_id) -- Unique constraint includes variant_id
 );
 COMMENT ON TABLE sgpos.sales_transaction_items IS 'Individual line items for a sales transaction.';
 COMMENT ON COLUMN sgpos.sales_transaction_items.unit_price IS 'Price at time of sale';
@@ -8455,7 +7456,7 @@ CREATE TABLE payment_methods (
     name VARCHAR(100) NOT NULL,
     type VARCHAR(50) NOT NULL CHECK (type IN ('CASH', 'CARD', 'NETS', 'PAYNOW', 'VOUCHER', 'STORE_CREDIT')),
     is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added created_at/updated_at to match other tables for consistency
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(company_id, name)
 );
@@ -8466,8 +7467,8 @@ CREATE TABLE payments (
     payment_method_id UUID NOT NULL REFERENCES sgpos.payment_methods(id),
     amount NUMERIC(19, 2) NOT NULL,
     reference_number VARCHAR(100),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    -- FIX: Removed updated_at column to match the ORM model, as payments are immutable.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() -- Added updated_at for consistency
 );
 COMMENT ON TABLE sgpos.payments IS 'Records individual payments, supporting split tender.';
 COMMENT ON COLUMN sgpos.payments.reference_number IS 'For card transactions, e-wallets, etc.';
@@ -8486,8 +7487,8 @@ CREATE TABLE chart_of_accounts (
     account_type VARCHAR(50) NOT NULL CHECK (account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')),
     parent_id UUID REFERENCES sgpos.chart_of_accounts(id),
     is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
     UNIQUE(company_id, account_code)
 );
 
@@ -8497,12 +7498,12 @@ CREATE TABLE journal_entries (
     entry_number VARCHAR(50) NOT NULL,
     entry_date DATE NOT NULL,
     description TEXT,
-    reference_type VARCHAR(50),
+    reference_type VARCHAR(50), -- e.g., 'SALE', 'PURCHASE'
     reference_id UUID,
     status VARCHAR(20) NOT NULL DEFAULT 'POSTED' CHECK (status IN ('DRAFT', 'POSTED', 'VOID')),
     created_by_user_id UUID NOT NULL REFERENCES sgpos.users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
     UNIQUE(company_id, entry_number)
 );
 
@@ -8514,7 +7515,8 @@ CREATE TABLE journal_entry_lines (
     credit_amount NUMERIC(19, 2) NOT NULL DEFAULT 0,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Added for consistency
+    -- A line must be either a debit or a credit, but not both. (Disallows 0,0)
     CONSTRAINT debit_or_credit_check CHECK ( (debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0) )
 );
 COMMENT ON TABLE sgpos.journal_entry_lines IS 'Individual lines of a double-entry bookkeeping record.';
@@ -8529,7 +7531,7 @@ CREATE TABLE audit_logs (
     id BIGSERIAL PRIMARY KEY,
     company_id UUID,
     user_id UUID REFERENCES sgpos.users(id) ON DELETE SET NULL,
-    action VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL, -- e.g., 'CREATE_PRODUCT', 'UPDATE_PRICE'
     table_name VARCHAR(100) NOT NULL,
     record_id UUID NOT NULL,
     old_values JSONB,
@@ -8568,8 +7570,6 @@ CREATE INDEX idx_stock_movements_company_id ON sgpos.stock_movements(company_id)
 CREATE INDEX idx_stock_movements_outlet_id ON sgpos.stock_movements(outlet_id);
 CREATE INDEX idx_stock_movements_product_id ON sgpos.stock_movements(product_id);
 CREATE INDEX idx_stock_movements_created_by_user_id ON sgpos.stock_movements(created_by_user_id);
--- FIX: Added missing index for consistency and performance.
-CREATE INDEX idx_stock_movements_reference_id ON sgpos.stock_movements(reference_id);
 CREATE INDEX idx_purchase_orders_company_id ON sgpos.purchase_orders(company_id);
 CREATE INDEX idx_purchase_orders_outlet_id ON sgpos.purchase_orders(outlet_id);
 CREATE INDEX idx_purchase_orders_supplier_id ON sgpos.purchase_orders(supplier_id);
@@ -8578,6 +7578,7 @@ CREATE INDEX idx_purchase_order_items_product_id ON sgpos.purchase_order_items(p
 CREATE INDEX idx_customers_company_id ON sgpos.customers(company_id);
 CREATE INDEX idx_sales_transactions_company_id ON sgpos.sales_transactions(company_id);
 CREATE INDEX idx_sales_transactions_outlet_id ON sgpos.sales_transactions(outlet_id);
+    -- Changed from sales_transactions_date to sales_transactions_transaction_date to be more specific
 CREATE INDEX idx_sales_transactions_transaction_date ON sgpos.sales_transactions(transaction_date DESC);
 CREATE INDEX idx_sales_transactions_customer_id ON sgpos.sales_transactions(customer_id);
 CREATE INDEX idx_sales_transactions_cashier_id ON sgpos.sales_transactions(cashier_id);
@@ -8744,17 +7745,9 @@ This migration creates all tables for the SG-POS system as defined in the
 app/models/ directory. It ensures that all columns, data types, constraints,
 and relationships are correctly established in a new database.
 
-This version fixes the following discrepancies from the original auto-generated file:
-- Adds the missing 'reference_type' column to the 'stock_movements' table.
-- Adds the missing 'variant_id' column, foreign key, and index to 'purchase_order_items' and 'sales_transaction_items'.
-- Corrects the unique constraints on 'purchase_order_items' and 'sales_transaction_items' to include 'variant_id'.
-- Adds missing timestamp columns to the 'journal_entry_lines' table.
-- Corrects the CHECK constraint on 'journal_entry_lines' to accurately reflect accounting principles (debit or credit, not both).
-- Removes the erroneous 'updated_at' column from the immutable 'payments' table to match the ORM.
-
 Revision ID: d5a6759ef2f7
 Revises: 
-Create Date: 2025-06-19 10:00:00.000000
+Create Date: 2025-06-16 00:57:37.705263
 """
 from alembic import op
 import sqlalchemy as sa
@@ -8768,12 +7761,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Ensure the target schema exists before creating tables within it.
+    # Schema creation should be handled by Alembic's context configuration
+    # in env.py, but we can ensure it exists here as well.
     op.execute("CREATE SCHEMA IF NOT EXISTS sgpos")
 
     # ### Table Creation - Order respects Foreign Key dependencies ###
 
-    # --- Group 1: Tables with no or self-referencing dependencies ---
+    # --- Group 1: Tables with no dependencies ---
     op.create_table('companies',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('name', sa.String(length=255), nullable=False),
@@ -9127,7 +8121,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name=op.f('ck_journal_entry_lines_debit_or_credit_check')),
+        sa.CheckConstraint('(debit_amount >= 0 AND credit_amount >= 0) AND (debit_amount != credit_amount)', name=op.f('ck_journal_entry_lines_debit_or_credit_check')),
         sa.ForeignKeyConstraint(['account_id'], ['sgpos.chart_of_accounts.id'], name=op.f('fk_journal_entry_lines_account_id_chart_of_accounts')),
         sa.ForeignKeyConstraint(['journal_entry_id'], ['sgpos.journal_entries.id'], name=op.f('fk_journal_entry_lines_journal_entry_id_journal_entries'), ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_journal_entry_lines')),
@@ -9348,9 +8342,6 @@ def downgrade() -> None:
     # --- Drop Group 1 ---
     op.drop_table('permissions', schema='sgpos')
     op.drop_table('companies', schema='sgpos')
-    
-    # Finally, drop the schema itself for a complete teardown
-    op.execute("DROP SCHEMA IF EXISTS sgpos CASCADE")
     # ### end Alembic commands ###
 
 ```
@@ -9361,7 +8352,7 @@ def downgrade() -> None:
 import sys
 import os 
 from logging.config import fileConfig
-import asyncio
+import asyncio # Import asyncio for the new run_migrations_online
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -9369,59 +8360,87 @@ from sqlalchemy import text
 
 from alembic import context
 
+# NEW: Import load_dotenv from python-dotenv
 from dotenv import load_dotenv
 
 # Add the project's root directory to sys.path
+# This allows 'app' modules to be imported correctly regardless of
+# where the alembic command is executed from.
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Load environment variables from .env.dev file
+# NEW: Load environment variables from .env.dev file
+# This must be done BEFORE alembic tries to read config values
 load_dotenv(os.path.join(project_root, '.env.dev'))
 
+# This is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
 config = context.config
 
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from app.models.base import Base
-from app.models import *
+# add your model's MetaData object here
+# for 'autogenerate' support
+from app.models.base import Base # IMPORTANT: Import your Base
 
-target_metadata = Base.metadata
+# IMPORT ALL YOUR ORM MODELS HERE SO ALEMBIC CAN DETECT THEM FOR AUTOGENERATE
+# Using '*' imports all classes defined in these modules.
+from app.models.company import *
+from app.models.user import *
+from app.models.product import *
+from app.models.inventory import *
+from app.models.customer import *
+from app.models.sales import *
+from app.models.accounting import *
+from app.models.audit_log import *
 
-# FIX: Check if we are in a test environment using SQLite by inspecting the URL
-# that pytest will place in the config. If not present, fall back to the env var.
-db_url_from_config = config.get_main_option("sqlalchemy.url")
-is_test_mode = db_url_from_config and "sqlite" in db_url_from_config
 
-if is_test_mode:
-    # For SQLite, we don't use a schema.
-    target_metadata.schema = None
-    alembic_db_url = db_url_from_config
+target_metadata = Base.metadata # IMPORTANT: Set this to your Base.metadata
+
+# Retrieve DATABASE_URL explicitly from environment after dotenv loads it
+db_url = os.environ.get("DATABASE_URL")
+if db_url is None:
+    raise Exception("DATABASE_URL environment variable is not set. Please ensure .env.dev is configured correctly or the variable is in your environment.")
+
+# Modify the DATABASE_URL to use psycopg2 (synchronous driver) for Alembic.
+# This avoids the "MissingGreenlet" error as Alembic runs synchronously.
+# The application itself will continue to use asyncpg.
+if db_url.startswith("postgresql+asyncpg"):
+    alembic_db_url = db_url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1) # Only replace first occurrence
 else:
-    # For PostgreSQL, use the production/development URL and driver
-    db_url_from_env = os.environ.get("DATABASE_URL")
-    if not db_url_from_env:
-        raise Exception("DATABASE_URL not set for non-test environment.")
-        
-    if db_url_from_env.startswith("postgresql+asyncpg"):
-        alembic_db_url = db_url_from_env.replace("postgresql+asyncpg", "postgresql+psycopg2", 1)
-    else:
-        alembic_db_url = db_url_from_env
+    alembic_db_url = db_url # Use as is if it's not asyncpg
 
-# Set the URL for Alembic to use
-config.set_main_option("sqlalchemy.url", alembic_db_url)
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
+    """Run migrations in 'offline' mode.
+
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a database to begin with.
+
+    Calls to context.execute() here emit the given string to the
+    script output.
+
+    """
+    # Use the explicitly loaded alembic_db_url instead of config.get_main_option
     context.configure(
         url=alembic_db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        version_table_schema=target_metadata.schema
+        # IMPORTANT: Tell Alembic to manage its version table within the 'sgpos' schema
+        version_table_schema=target_metadata.schema if target_metadata and target_metadata.schema else None
     )
 
     with context.begin_transaction():
@@ -9430,31 +8449,29 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection):
     """Helper function to run the migrations within a context."""
-    # Re-check test mode here as well for safety
-    is_test = connection.engine.dialect.name == "sqlite"
-    
-    current_target_metadata = Base.metadata
-    if is_test:
-        current_target_metadata.schema = None
-
     context.configure(
         connection=connection,
-        target_metadata=current_target_metadata,
-        version_table_schema=current_target_metadata.schema
+        target_metadata=target_metadata,
+        # IMPORTANT: Tell Alembic to manage its version table within the 'sgpos' schema
+        version_table_schema=target_metadata.schema if target_metadata and target_metadata.schema else None
     )
 
     with context.begin_transaction():
-        if not is_test and current_target_metadata.schema:
-            context.execute(text(f"CREATE SCHEMA IF NOT EXISTS {current_target_metadata.schema}"))
+        # Ensure the schema exists before running migrations
+        context.execute(text(f"CREATE SCHEMA IF NOT EXISTS {target_metadata.schema}"))
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Run migrations in 'online' mode.
+    This online migration is now async to support creating an async engine.
+    """
+    # Create an engine and connect to the database.
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        url=alembic_db_url
     )
 
     with connectable.connect() as connection:
@@ -9464,1385 +8481,6 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
-```
-
-# tests/integration/__init__.py
-```py
-
-```
-
-# tests/__init__.py
-```py
-
-```
-
-# tests/factories.py
-```py
-# File: tests/factories.py
-"""
-factory-boy classes for creating test data.
-"""
-import factory
-from factory.alchemy import SQLAlchemyModelFactory
-from decimal import Decimal
-import uuid
-
-from app.models import (
-    Company, Outlet, User, Role, Product, Customer, PaymentMethod, Supplier
-)
-
-# Note: The session is now configured and injected by the `db_session`
-# fixture in `tests/conftest.py`.
-
-class CompanyFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Company
-        sqlalchemy_session_persistence = "flush"
-
-    id = factory.LazyFunction(uuid.uuid4)
-    name = factory.Faker('company')
-    registration_number = factory.Sequence(lambda n: f"UEN{n:08d}")
-    is_active = True
-
-class OutletFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Outlet
-        sqlalchemy_session_persistence = "flush"
-
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    code = factory.Sequence(lambda n: f"OUTLET-{n}")
-    name = factory.Faker('word')
-    is_active = True
-
-class UserFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = User
-        sqlalchemy_session_persistence = "flush"
-
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    username = factory.Faker('user_name')
-    email = factory.Faker('email')
-    password_hash = "a_fake_hash"
-    is_active = True
-
-class RoleFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Role
-        sqlalchemy_session_persistence = "flush"
-    
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    name = factory.Sequence(lambda n: f"Role {n}")
-    is_system_role = False
-
-class ProductFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Product
-        sqlalchemy_session_persistence = "flush"
-
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    sku = factory.Sequence(lambda n: f"SKU{n:04d}")
-    name = factory.Faker('word')
-    cost_price = Decimal("10.00")
-    selling_price = Decimal("20.00")
-    gst_rate = Decimal("9.00")
-    track_inventory = True
-    is_active = True
-
-class CustomerFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Customer
-        sqlalchemy_session_persistence = "flush"
-    
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    customer_code = factory.Sequence(lambda n: f"CUST-{n:04d}")
-    name = factory.Faker('name')
-    is_active = True
-
-class PaymentMethodFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = PaymentMethod
-        sqlalchemy_session_persistence = "flush"
-    
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    name = factory.Sequence(lambda n: f"Method {n}")
-    type = "CASH"
-    is_active = True
-
-class SupplierFactory(SQLAlchemyModelFactory):
-    class Meta:
-        model = Supplier
-        sqlalchemy_session_persistence = "flush"
-    
-    id = factory.LazyFunction(uuid.uuid4)
-    company = factory.SubFactory(CompanyFactory)
-    name = factory.Faker('company')
-    is_active = True
-
-```
-
-# tests/conftest.py
-```py
-# File: tests/conftest.py
-"""
-Pytest configuration and fixtures for the entire test suite.
-"""
-import os
-# FIX: Set the test mode environment variable BEFORE any app modules are imported.
-# This ensures that Base.metadata is created without the 'sgpos' schema.
-os.environ["SGPOS_TEST_MODE"] = "1"
-
-import pytest
-import asyncio
-from typing import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-
-from app.core.config import settings
-from app.core.application_core import ApplicationCore
-from app.models.base import Base
-from tests import factories
-
-# --- Test Database Setup ---
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
-
-@pytest.fixture(scope="session")
-async def db_engine() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Session-scoped fixture to create an engine and set up the database schema once.
-    """
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-
-    # Create all tables directly from the (now schema-less) ORM metadata
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    yield engine
-
-    await engine.dispose()
-
-@pytest.fixture
-async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
-    """
-    Provides a clean database session for each test function. It creates a
-    transaction that is rolled back after the test, ensuring data isolation.
-    """
-    async with db_engine.connect() as connection:
-        async with connection.begin() as transaction:
-            session_factory = async_sessionmaker(bind=connection, expire_on_commit=False)
-            session = session_factory()
-
-            # Configure factory-boy to use this test's session
-            for factory in factories.SQLAlchemyModelFactory.__subclasses__():
-                factory._meta.sqlalchemy_session = session
-
-            yield session
-
-            # The transaction.rollback() call ensures the DB is clean for the next test
-            await transaction.rollback()
-
-
-# --- Application Core Fixture ---
-
-@pytest.fixture
-def test_settings() -> settings:
-    """Overrides production settings for a test context."""
-    return settings
-
-@pytest.fixture
-async def test_core(test_settings, db_session, monkeypatch) -> ApplicationCore:
-    """
-    Provides a fully initialized ApplicationCore instance connected
-    to the isolated in-memory test database for a single test.
-    """
-    core = ApplicationCore(test_settings)
-    
-    # This is a mock ApplicationCore initialization for testing purposes.
-    # It bypasses the parts that require a full Qt event loop (AsyncWorkerThread).
-    test_session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
-    monkeypatch.setattr(core, "_session_factory", test_session_factory)
-    monkeypatch.setattr(core, "_engine", db_session.bind)
-    
-    yield core
-
-```
-
-# tests/unit/__init__.py
-```py
-
-```
-
-# tests/unit/services/__init__.py
-```py
-# File: tests/unit/services/__init__.py
-
-```
-
-# tests/unit/services/test_product_service.py
-```py
-# File: tests/unit/services/test_product_service.py
-"""
-Unit tests for the ProductService class.
-"""
-import pytest
-
-from app.core.result import Success
-from tests.factories import ProductFactory, CompanyFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestProductService:
-    """Test suite for product-related data access services."""
-
-    async def test_get_by_sku_success(self, test_core):
-        """Verify that get_by_sku retrieves the correct product."""
-        # --- Arrange ---
-        company = CompanyFactory()
-        # Create a product with a specific SKU to search for
-        product = ProductFactory(company=company, sku="FIND-ME-123")
-        # Create other products to ensure we don't accidentally fetch them
-        ProductFactory.create_batch(3, company=company)
-
-        # --- Act ---
-        result = await test_core.product_service.get_by_sku(company.id, "FIND-ME-123")
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        found_product = result.value
-        assert found_product is not None
-        assert found_product.id == product.id
-        assert found_product.sku == "FIND-ME-123"
-
-    async def test_get_by_sku_not_found(self, test_core):
-        """Verify get_by_sku returns None for a non-existent SKU."""
-        # --- Arrange ---
-        company = CompanyFactory()
-        ProductFactory.create_batch(3, company=company)
-
-        # --- Act ---
-        result = await test_core.product_service.get_by_sku(company.id, "SKU-DOES-NOT-EXIST")
-        
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value is None
-
-    async def test_search_products(self, test_core):
-        """
-        Verify that the search service method correctly filters products
-        by name, SKU, and barcode in a case-insensitive manner.
-        """
-        # --- Arrange ---
-        company = CompanyFactory()
-        ProductFactory(company=company, name="Premium Quality Keyboard", sku="KEY-PREM-01", barcode="11111")
-        ProductFactory(company=company, name="Standard Mouse", sku="MSE-STD-02", barcode="22222")
-        ProductFactory(company=company, name="Premium Quality Mouse", sku="MSE-PREM-03", barcode="33333")
-        ProductFactory(company=company, name="Gaming Keyboard XL", sku="KEY-GAME-04", barcode="44444")
-        
-        # --- Act & Assert ---
-
-        # Search by common name part, case-insensitive
-        result1 = await test_core.product_service.search(company.id, "quality")
-        assert isinstance(result1, Success)
-        assert len(result1.value) == 2
-        assert {p.name for p in result1.value} == {"Premium Quality Keyboard", "Premium Quality Mouse"}
-
-        # Search by SKU prefix
-        result2 = await test_core.product_service.search(company.id, "KEY-")
-        assert isinstance(result2, Success)
-        assert len(result2.value) == 2
-        assert {p.name for p in result2.value} == {"Premium Quality Keyboard", "Gaming Keyboard XL"}
-
-        # Search by unique barcode
-        result3 = await test_core.product_service.search(company.id, "33333")
-        assert isinstance(result3, Success)
-        assert len(result3.value) == 1
-        assert result3.value[0].name == "Premium Quality Mouse"
-
-        # Search with no matches
-        result4 = await test_core.product_service.search(company.id, "nonexistent")
-        assert isinstance(result4, Success)
-        assert len(result4.value) == 0
-
-```
-
-# tests/unit/business_logic/managers/test_sales_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_sales_manager.py
-"""
-Unit tests for the SalesManager class.
-"""
-import pytest
-from decimal import Decimal
-import uuid
-
-from app.core.result import Success, Failure
-from app.business_logic.dto.sales_dto import SaleCreateDTO, CartItemDTO, PaymentInfoDTO
-from app.models import SalesTransaction, StockMovement, Inventory, Product
-from tests.factories import ProductFactory, UserFactory, PaymentMethodFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestSalesManager:
-    """Test suite for sales-related business logic."""
-
-    async def test_finalize_sale_success(self, test_core, db_session):
-        """
-        Verify that a successful sale:
-        1. Returns a Success result with a FinalizedSaleDTO.
-        2. Creates a SalesTransaction, items, and payments.
-        3. Correctly deducts stock from inventory.
-        4. Logs a stock movement.
-        """
-        # --- Arrange ---
-        # 1. Create prerequisite data using factories
-        cashier = UserFactory(company=None, company_id=test_core.current_company_id)
-        product = ProductFactory(company=None, company_id=test_core.current_company_id)
-        payment_method = PaymentMethodFactory(company=None, company_id=test_core.current_company_id)
-        
-        # 2. Manually create the initial inventory record
-        initial_stock = 100
-        inventory_item = Inventory(
-            outlet_id=test_core.current_outlet_id,
-            product_id=product.id,
-            quantity_on_hand=Decimal(initial_stock)
-        )
-        db_session.add(inventory_item)
-        await db_session.commit()
-
-        # 3. Construct the DTO for the sale
-        sale_dto = SaleCreateDTO(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            cashier_id=cashier.id,
-            cart_items=[
-                CartItemDTO(product_id=product.id, quantity=Decimal("2"))
-            ],
-            payments=[
-                PaymentInfoDTO(payment_method_id=payment_method.id, amount=Decimal("100.00"))
-            ]
-        )
-
-        # --- Act ---
-        result = await test_core.sales_manager.finalize_sale(sale_dto)
-
-        # --- Assert ---
-        # 1. Check the result and its type/data
-        assert isinstance(result, Success)
-        finalized_sale = result.value
-        assert finalized_sale.total_amount == (product.selling_price * 2) * (Decimal("1") + product.gst_rate / 100)
-        assert finalized_sale.change_due >= 0
-
-        # 2. Verify database state changes
-        await db_session.refresh(inventory_item)
-        assert inventory_item.quantity_on_hand == initial_stock - 2
-
-        tx_count = await db_session.scalar(SalesTransaction.count().where(SalesTransaction.id == finalized_sale.transaction_id))
-        assert tx_count == 1
-        
-        movement = await db_session.get(StockMovement, {"reference_id": finalized_sale.transaction_id, "product_id": product.id})
-        assert movement is not None
-        assert movement.movement_type == 'SALE'
-        assert movement.quantity_change == -2
-
-    async def test_finalize_sale_insufficient_payment(self, test_core, db_session):
-        """Verify that a sale fails if payment is less than the total amount."""
-        # --- Arrange ---
-        cashier = UserFactory(company_id=test_core.current_company_id)
-        product = ProductFactory(company_id=test_core.current_company_id, selling_price=Decimal("50.00"))
-        payment_method = PaymentMethodFactory(company_id=test_core.current_company_id)
-        
-        sale_dto = SaleCreateDTO(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            cashier_id=cashier.id,
-            cart_items=[CartItemDTO(product_id=product.id, quantity=1)],
-            payments=[PaymentInfoDTO(payment_method_id=payment_method.id, amount=Decimal("10.00"))] # Price is >50, payment is 10
-        )
-
-        # --- Act ---
-        result = await test_core.sales_manager.finalize_sale(sale_dto)
-        
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "less than the total amount due" in result.error
-
-        # Verify no records were created
-        tx_count = await db_session.scalar(SalesTransaction.count())
-        assert tx_count == 0
-
-    async def test_finalize_sale_insufficient_stock(self, test_core, db_session):
-        """Verify that a sale fails if there is not enough stock."""
-        # --- Arrange ---
-        cashier = UserFactory(company_id=test_core.current_company_id)
-        product = ProductFactory(company_id=test_core.current_company_id)
-        payment_method = PaymentMethodFactory(company_id=test_core.current_company_id)
-        
-        initial_stock = 5
-        inventory_item = Inventory(
-            outlet_id=test_core.current_outlet_id,
-            product_id=product.id,
-            quantity_on_hand=Decimal(initial_stock)
-        )
-        db_session.add(inventory_item)
-        await db_session.commit()
-
-        sale_dto = SaleCreateDTO(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            cashier_id=cashier.id,
-            cart_items=[CartItemDTO(product_id=product.id, quantity=10)], # Try to sell 10
-            payments=[PaymentInfoDTO(payment_method_id=payment_method.id, amount=Decimal("1000.00"))]
-        )
-
-        # --- Act ---
-        result = await test_core.sales_manager.finalize_sale(sale_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "Insufficient stock" in result.error
-
-        # Verify stock level was not changed and no transaction was created
-        await db_session.refresh(inventory_item)
-        assert inventory_item.quantity_on_hand == initial_stock
-        
-        tx_count = await db_session.scalar(SalesTransaction.count())
-        assert tx_count == 0
-
-```
-
-# tests/unit/business_logic/managers/test_inventory_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_inventory_manager.py
-"""
-Unit tests for the InventoryManager class.
-"""
-import pytest
-from decimal import Decimal
-import uuid
-
-from app.core.result import Success, Failure
-from app.business_logic.dto.inventory_dto import StockAdjustmentDTO, StockAdjustmentItemDTO, PurchaseOrderCreateDTO, PurchaseOrderItemCreateDTO
-from app.models import Inventory, StockMovement, PurchaseOrder, PurchaseOrderItem
-from tests.factories import ProductFactory, UserFactory, SupplierFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestInventoryManager:
-    """Test suite for inventory-related business logic."""
-
-    async def test_adjust_stock_success(self, test_core, db_session):
-        """Verify stock adjustment correctly updates inventory and logs movement."""
-        # --- Arrange ---
-        user = UserFactory(company_id=test_core.current_company_id)
-        product = ProductFactory(company_id=test_core.current_company_id)
-        
-        initial_qty = Decimal("50")
-        inventory = Inventory(
-            outlet_id=test_core.current_outlet_id,
-            product_id=product.id,
-            quantity_on_hand=initial_qty
-        )
-        db_session.add(inventory)
-        await db_session.commit()
-
-        counted_qty = Decimal("55.5")
-        adjustment_dto = StockAdjustmentDTO(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            user_id=user.id,
-            notes="Annual stock take",
-            items=[StockAdjustmentItemDTO(product_id=product.id, counted_quantity=counted_qty)]
-        )
-
-        # --- Act ---
-        result = await test_core.inventory_manager.adjust_stock(adjustment_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        
-        await db_session.refresh(inventory)
-        assert inventory.quantity_on_hand == counted_qty
-
-        movement = await db_session.get(StockMovement, {"product_id": product.id, "notes": "Annual stock take"})
-        assert movement is not None
-        assert movement.movement_type == 'ADJUSTMENT_IN'
-        assert movement.quantity_change == counted_qty - initial_qty
-
-    async def test_create_purchase_order_success(self, test_core, db_session):
-        """Verify that a purchase order and its items are created correctly."""
-        # --- Arrange ---
-        product1 = ProductFactory(company_id=test_core.current_company_id, cost_price=Decimal("10.00"))
-        product2 = ProductFactory(company_id=test_core.current_company_id, cost_price=Decimal("5.50"))
-        supplier = SupplierFactory(company_id=test_core.current_company_id)
-
-        po_create_dto = PurchaseOrderCreateDTO(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            supplier_id=supplier.id,
-            items=[
-                PurchaseOrderItemCreateDTO(product_id=product1.id, quantity_ordered=Decimal("10"), unit_cost=Decimal("9.80")),
-                PurchaseOrderItemCreateDTO(product_id=product2.id, quantity_ordered=Decimal("20"), unit_cost=Decimal("5.00")),
-            ]
-        )
-        
-        # --- Act ---
-        result = await test_core.inventory_manager.create_purchase_order(po_create_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        po_dto = result.value
-        
-        expected_total = (Decimal("10") * Decimal("9.80")) + (Decimal("20") * Decimal("5.00"))
-        assert po_dto.total_amount == expected_total
-
-        po_db = await db_session.get(PurchaseOrder, po_dto.id)
-        assert po_db is not None
-        assert po_db.total_amount == expected_total
-        
-        items_count = await db_session.scalar(PurchaseOrderItem.count().where(PurchaseOrderItem.purchase_order_id == po_db.id))
-        assert items_count == 2
-
-    async def test_receive_purchase_order_items_success(self, test_core, db_session):
-        """Verify receiving PO items updates stock, PO status, and logs movement."""
-        # --- Arrange ---
-        user = UserFactory(company_id=test_core.current_company_id)
-        product = ProductFactory(company_id=test_core.current_company_id)
-        supplier = SupplierFactory(company_id=test_core.current_company_id)
-        
-        # Create the PO
-        po = PurchaseOrder(
-            company_id=test_core.current_company_id,
-            outlet_id=test_core.current_outlet_id,
-            supplier_id=supplier.id,
-            po_number="PO-TEST-123",
-            status="SENT", # Must be in a receivable state
-            items=[PurchaseOrderItem(product_id=product.id, quantity_ordered=10, unit_cost=10)]
-        )
-        db_session.add(po)
-        
-        # Create inventory record with zero stock
-        inventory = Inventory(outlet_id=test_core.current_outlet_id, product_id=product.id, quantity_on_hand=0)
-        db_session.add(inventory)
-        await db_session.commit()
-
-        items_to_receive = [{"product_id": product.id, "quantity_received": Decimal("7")}]
-
-        # --- Act ---
-        result = await test_core.inventory_manager.receive_purchase_order_items(po.id, items_to_receive, user.id)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-
-        await db_session.refresh(po)
-        await db_session.refresh(inventory)
-        po_item = po.items[0]
-
-        assert po_item.quantity_received == 7
-        assert po.status == "PARTIALLY_RECEIVED"
-        assert inventory.quantity_on_hand == 7
-
-        movement = await db_session.get(StockMovement, {"reference_id": po.id, "product_id": product.id})
-        assert movement is not None
-        assert movement.movement_type == 'PURCHASE'
-        assert movement.quantity_change == 7
-        
-    async def test_receive_more_than_ordered_fails(self, test_core, db_session):
-        """Verify that receiving more items than ordered fails and rolls back."""
-        # --- Arrange ---
-        user = UserFactory(company_id=test_core.current_company_id)
-        product = ProductFactory(company_id=test_core.current_company_id)
-        supplier = SupplierFactory(company_id=test_core.current_company_id)
-        
-        po = PurchaseOrder(
-            company_id=test_core.current_company_id, outlet_id=test_core.current_outlet_id,
-            supplier_id=supplier.id, po_number="PO-FAIL-456", status="SENT",
-            items=[PurchaseOrderItem(product_id=product.id, quantity_ordered=10, unit_cost=10)]
-        )
-        db_session.add(po)
-        await db_session.commit()
-        
-        items_to_receive = [{"product_id": product.id, "quantity_received": Decimal("11")}] # Attempt to receive too many
-
-        # --- Act ---
-        result = await test_core.inventory_manager.receive_purchase_order_items(po.id, items_to_receive, user.id)
-        
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "exceeds ordered quantity" in result.error
-        
-        # Verify state was not changed
-        await db_session.refresh(po)
-        assert po.items[0].quantity_received == 0
-        assert po.status == "SENT"
-        
-        movement_count = await db_session.scalar(StockMovement.count().where(StockMovement.reference_id == po.id))
-        assert movement_count == 0
-
-```
-
-# tests/unit/business_logic/managers/test_product_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_product_manager.py
-"""
-Unit tests for the ProductManager class.
-"""
-import pytest
-from decimal import Decimal
-
-from app.core.result import Success, Failure
-from app.business_logic.dto.product_dto import ProductCreateDTO, ProductUpdateDTO
-from app.models import Product
-from tests.factories import ProductFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestProductManager:
-    """Test suite for product-related business logic."""
-
-    async def test_create_product_success(self, test_core):
-        """Verify successful creation of a new product."""
-        # --- Arrange ---
-        dto = ProductCreateDTO(
-            sku="TEST-001",
-            name="Test Product",
-            selling_price=Decimal("99.99"),
-            cost_price=Decimal("50.00")
-        )
-        
-        # --- Act ---
-        result = await test_core.product_manager.create_product(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value.sku == "TEST-001"
-        assert result.value.name == "Test Product"
-
-    async def test_create_product_duplicate_sku_fails(self, test_core):
-        """Verify that creating a product with a duplicate SKU fails."""
-        # --- Arrange ---
-        ProductFactory(company_id=test_core.current_company_id, sku="EXISTING-SKU")
-        dto = ProductCreateDTO(
-            sku="EXISTING-SKU",
-            name="Another Product",
-            selling_price=Decimal("10.00"),
-            cost_price=Decimal("5.00")
-        )
-
-        # --- Act ---
-        result = await test_core.product_manager.create_product(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "already exists" in result.error
-
-    async def test_update_product_success(self, test_core):
-        """Verify successful update of a product's details."""
-        # --- Arrange ---
-        product = ProductFactory(company_id=test_core.current_company_id, name="Original Name")
-        update_dto = ProductUpdateDTO(
-            sku=product.sku, # SKU is not changed
-            name="Updated Name",
-            selling_price=product.selling_price,
-            cost_price=product.cost_price,
-            is_active=False
-        )
-
-        # --- Act ---
-        result = await test_core.product_manager.update_product(product.id, update_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value.name == "Updated Name"
-        assert result.value.is_active is False
-
-    async def test_deactivate_product_success(self, test_core, db_session):
-        """Verify that deactivating a product sets its is_active flag to False."""
-        # --- Arrange ---
-        product = ProductFactory(company_id=test_core.current_company_id, is_active=True)
-
-        # --- Act ---
-        result = await test_core.product_manager.deactivate_product(product.id)
-        
-        # --- Assert ---
-        assert isinstance(result, Success)
-        
-        updated_product = await db_session.get(Product, product.id)
-        assert updated_product.is_active is False
-
-    async def test_search_products(self, test_core):
-        """Verify that searching returns the correct products."""
-        # --- Arrange ---
-        ProductFactory(company_id=test_core.current_company_id, name="Blue Widget", sku="WID-BLUE")
-        ProductFactory(company_id=test_core.current_company_id, name="Red Widget", sku="WID-RED")
-        ProductFactory(company_id=test_core.current_company_id, name="Green Gadget", sku="GAD-GRN")
-
-        # --- Act & Assert ---
-        # Search by name fragment
-        result_widget = await test_core.product_manager.search_products(test_core.current_company_id, "Widget")
-        assert isinstance(result_widget, Success)
-        assert len(result_widget.value) == 2
-
-        # Search by SKU fragment
-        result_wid = await test_core.product_manager.search_products(test_core.current_company_id, "WID")
-        assert isinstance(result_wid, Success)
-        assert len(result_wid.value) == 2
-
-        # Search for specific item
-        result_red = await test_core.product_manager.search_products(test_core.current_company_id, "Red Widget")
-        assert isinstance(result_red, Success)
-        assert len(result_red.value) == 1
-        assert result_red.value[0].name == "Red Widget"
-
-```
-
-# tests/unit/business_logic/managers/test_user_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_user_manager.py
-"""
-Unit tests for the UserManager class.
-"""
-import pytest
-from app.core.result import Success, Failure
-from app.business_logic.dto.user_dto import UserCreateDTO, UserUpdateDTO
-from app.models import User, Role, UserRole
-from tests.factories import UserFactory, RoleFactory, OutletFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestUserManager:
-    """Test suite for user and role management logic."""
-
-    async def test_create_user_success_with_roles(self, test_core, db_session):
-        """Verify successful user creation and role assignment."""
-        # --- Arrange ---
-        role1 = RoleFactory(company_id=test_core.current_company_id)
-        role2 = RoleFactory(company_id=test_core.current_company_id)
-        
-        dto = UserCreateDTO(
-            username="newuser",
-            email="newuser@test.com",
-            password="StrongPassword123",
-            roles=[role1.id, role2.id]
-        )
-
-        # --- Act ---
-        result = await test_core.user_manager.create_user(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        user_dto = result.value
-        assert user_dto.username == "newuser"
-        
-        # Verify roles were assigned in the database
-        user_db = await db_session.get(User, user_dto.id)
-        assigned_role_ids = {ur.role_id for ur in user_db.user_roles}
-        assert assigned_role_ids == {role1.id, role2.id}
-
-    async def test_create_user_duplicate_username_fails(self, test_core):
-        """Verify that creating a user with a duplicate username fails."""
-        # --- Arrange ---
-        UserFactory(company_id=test_core.current_company_id, username="existinguser")
-        role = RoleFactory(company_id=test_core.current_company_id)
-        dto = UserCreateDTO(
-            username="existinguser",
-            email="another@email.com",
-            password="password",
-            roles=[role.id]
-        )
-        
-        # --- Act ---
-        result = await test_core.user_manager.create_user(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "already exists" in result.error
-
-    async def test_update_user_roles(self, test_core, db_session):
-        """Verify that a user's roles can be correctly updated."""
-        # --- Arrange ---
-        user = UserFactory(company_id=test_core.current_company_id)
-        role_to_remove = RoleFactory(company_id=test_core.current_company_id)
-        role_to_keep = RoleFactory(company_id=test_core.current_company_id)
-        role_to_add = RoleFactory(company_id=test_core.current_company_id)
-        
-        # Assign initial roles
-        outlet = OutletFactory(company_id=test_core.current_company_id)
-        test_core._current_outlet_id = outlet.id # Set context for role assignment
-        db_session.add_all([
-            UserRole(user_id=user.id, role_id=role_to_remove.id, outlet_id=outlet.id),
-            UserRole(user_id=user.id, role_id=role_to_keep.id, outlet_id=outlet.id)
-        ])
-        await db_session.commit()
-
-        update_dto = UserUpdateDTO(
-            username=user.username,
-            email=user.email,
-            roles=[role_to_keep.id, role_to_add.id] # New set of roles
-        )
-
-        # --- Act ---
-        result = await test_core.user_manager.update_user(user.id, update_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        
-        await db_session.refresh(user, attribute_names=['user_roles'])
-        final_role_ids = {ur.role_id for ur in user.user_roles}
-        assert final_role_ids == {role_to_keep.id, role_to_add.id}
-
-    async def test_deactivate_user_success(self, test_core, db_session):
-        """Verify that deactivating a user sets its is_active flag to False."""
-        # --- Arrange ---
-        user = UserFactory(company_id=test_core.current_company_id, is_active=True)
-
-        # --- Act ---
-        result = await test_core.user_manager.deactivate_user(user.id)
-        
-        # --- Assert ---
-        assert isinstance(result, Success)
-        
-        updated_user = await db_session.get(User, user.id)
-        assert updated_user.is_active is False
-
-```
-
-# tests/unit/business_logic/managers/test_customer_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_customer_manager.py
-"""
-Unit tests for the CustomerManager class.
-"""
-import pytest
-from decimal import Decimal
-
-from app.core.result import Success, Failure
-from app.business_logic.dto.customer_dto import CustomerCreateDTO
-from app.models import Customer
-from tests.factories import CustomerFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestCustomerManager:
-    """Test suite for customer-related business logic."""
-
-    async def test_create_customer_success(self, test_core):
-        """Verify successful creation of a new customer."""
-        # --- Arrange ---
-        dto = CustomerCreateDTO(
-            customer_code="CUST-001",
-            name="John Doe",
-            email="john.doe@example.com"
-        )
-        
-        # --- Act ---
-        result = await test_core.customer_manager.create_customer(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value.customer_code == "CUST-001"
-        assert result.value.name == "John Doe"
-
-    async def test_create_customer_duplicate_code_fails(self, test_core):
-        """Verify that creating a customer with a duplicate code fails."""
-        # --- Arrange ---
-        CustomerFactory(company_id=test_core.current_company_id, customer_code="EXISTING-CODE")
-        dto = CustomerCreateDTO(customer_code="EXISTING-CODE", name="Jane Doe")
-
-        # --- Act ---
-        result = await test_core.customer_manager.create_customer(test_core.current_company_id, dto)
-
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "already exists" in result.error
-
-    async def test_add_loyalty_points_for_sale(self, test_core, db_session):
-        """
-        Verify that loyalty points are correctly calculated and added to a customer.
-        Rule: 1 point per S$10 spent.
-        """
-        # --- Arrange ---
-        customer = CustomerFactory(company_id=test_core.current_company_id, loyalty_points=50)
-        sale_total = Decimal("125.50") # Should yield 12 points
-
-        # --- Act ---
-        result = await test_core.customer_manager.add_loyalty_points_for_sale(customer.id, sale_total)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        
-        await db_session.refresh(customer)
-        assert customer.loyalty_points == 50 + 12 # 50 initial + 12 from sale
-
-    async def test_search_customers(self, test_core):
-        """Verify that searching returns the correct customers."""
-        # --- Arrange ---
-        CustomerFactory(company_id=test_core.current_company_id, name="Alice Smith", email="alice@test.com")
-        CustomerFactory(company_id=test_core.current_company_id, name="Bob Smith", phone="91234567")
-        CustomerFactory(company_id=test_core.current_company_id, name="Charlie Brown", customer_code="CB-01")
-
-        # --- Act & Assert ---
-        # Search by common name
-        result_smith = await test_core.customer_manager.search_customers(test_core.current_company_id, "Smith")
-        assert isinstance(result_smith, Success)
-        assert len(result_smith.value) == 2
-
-        # Search by unique email
-        result_alice = await test_core.customer_manager.search_customers(test_core.current_company_id, "alice@test.com")
-        assert isinstance(result_alice, Success)
-        assert len(result_alice.value) == 1
-        assert result_alice.value[0].name == "Alice Smith"
-
-```
-
-# tests/unit/business_logic/managers/test_company_manager.py
-```py
-# File: tests/unit/business_logic/managers/test_company_manager.py
-"""
-Unit tests for the CompanyManager class.
-"""
-import pytest
-
-from app.core.result import Success, Failure
-from app.business_logic.dto.company_dto import CompanyUpdateDTO
-from tests.factories import CompanyFactory
-
-pytestmark = pytest.mark.asyncio
-
-class TestCompanyManager:
-    """Test suite for company-related business logic."""
-
-    async def test_get_company_success(self, test_core):
-        """Verify that company details can be successfully retrieved."""
-        # --- Arrange ---
-        company = CompanyFactory()
-
-        # --- Act ---
-        result = await test_core.company_manager.get_company(company.id)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value.id == company.id
-        assert result.value.name == company.name
-
-    async def test_update_company_success(self, test_core):
-        """Verify that updating a company's information is successful."""
-        # --- Arrange ---
-        company = CompanyFactory(name="Old Company Name")
-        update_dto = CompanyUpdateDTO(
-            name="New Company Name",
-            registration_number=company.registration_number, # Not changing
-            address="123 New Address, Singapore"
-        )
-
-        # --- Act ---
-        result = await test_core.company_manager.update_company(company.id, update_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Success)
-        assert result.value.id == company.id
-        assert result.value.name == "New Company Name"
-        assert result.value.address == "123 New Address, Singapore"
-
-    async def test_update_company_duplicate_reg_no_fails(self, test_core):
-        """Verify failure when trying to update to a registration number that already exists."""
-        # --- Arrange ---
-        company1 = CompanyFactory(registration_number="REG123")
-        company2 = CompanyFactory(registration_number="REG456")
-
-        update_dto = CompanyUpdateDTO(
-            name=company2.name,
-            registration_number=company1.registration_number # Attempt to use company1's reg number
-        )
-
-        # --- Act ---
-        result = await test_core.company_manager.update_company(company2.id, update_dto)
-
-        # --- Assert ---
-        assert isinstance(result, Failure)
-        assert "is already in use" in result.error
-
-```
-
-# README.md
-```md
-<p align="center">
-  <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/main/Dashboard_view.png" alt="SG-POS System Dashboard" width="700"/>
-</p>
-
-<h1 align="center">SG Point-of-Sale (SG-POS) System</h1>
-
-<p align="center">
-  <strong>An enterprise-grade, open-source Point-of-Sale system, meticulously engineered for Singapore's SMB retail landscape.</strong>
-</p>
-
-<p align="center">
-  <!-- Badges -->
-  <a href="#">
-    <img src="https://img.shields.io/badge/Status-Stable-brightgreen" alt="Project Status">
-  </a>
-  <a href="https://github.com/your-org/sg-pos-system/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
-  </a>
-  <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/Python-3.11+-3776AB.svg" alt="Python 3.11+">
-  </a>
-  <a href="https://www.qt.io/">
-    <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41CD52.svg" alt="PySide6">
-  </a>
-  <a href="https://www.postgresql.org/">
-    <img src="https://img.shields.io/badge/Database-PostgreSQL-336791.svg" alt="PostgreSQL">
-  </a>
-  <a href="https://github.com/psf/black">
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black">
-  </a>
-</p>
-
----
-
-## 📖 Table of Contents
-
-*   [1. Introduction: What is SG-POS?](#1-introduction-what-is-sg-pos)
-*   [2. Current Features & Status](#2-current-features--status)
-*   [3. Architectural Deep Dive](#3-architectural-deep-dive)
-    *   [The Layered Architecture](#the-layered-architecture)
-    *   [Module Interaction Flowchart](#module-interaction-flowchart)
-*   [4. Codebase Deep Dive](#4-codebase-deep-dive)
-    *   [Project File Hierarchy](#project-file-hierarchy)
-    *   [Key File & Directory Descriptions](#key-file--directory-descriptions)
-*   [5. Technology Stack](#5-technology-stack)
-*   [6. Developer Setup & Deployment Guide](#6-developer-setup--deployment-guide)
-    *   [Prerequisites](#prerequisites)
-    *   [Step-by-Step Setup Guide](#step-by-step-setup-guide)
-*   [7. Running the Test Suite](#7-running-the-test-suite)
-*   [8. User Guide: Running the Application](#8-user-guide-running-the-application)
-*   [9. Project Roadmap](#9-project-roadmap)
-    *   [Immediate Next Steps (v1.6+)](#immediate-next-steps-v16)
-    *   [Long-Term Vision (v2.0+)](#long-term-vision-v20)
-*   [10. How to Contribute](#10-how-to-contribute)
-*   [11. License](#11-license)
-
----
-
-## **1. Introduction: What is SG-POS?**
-
-**SG-POS** is a free and open-source Point-of-Sale system, engineered from the ground up to address the specific operational and regulatory challenges faced by Small to Medium-sized Businesses (SMBs) in Singapore. It aims to provide the power and polish of expensive enterprise systems in an accessible, modern, and maintainable package.
-
-This project is built with an obsessive focus on quality, both in the user experience and, most importantly, in the engineering. It serves not only as a functional tool but also as a reference implementation for professional-grade Python application architecture, featuring a non-blocking UI, a clean, layered design, and robust data integrity practices. The system is designed to be the central hub for a retail business, managing everything from the customer-facing checkout process to backend inventory control, procurement, and financial reporting.
-
----
-
-## **2. Current Features & Status**
-
-The application is in a **stable** state, with a robust architecture and a wide range of functional core features. The UI has been significantly enhanced for a better user experience, and a foundational automated test suite is now in place to guarantee reliability.
-
-| Feature Area                      | Status                  | Notes                                                                                                                              |
-| --------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Dashboard**                     | ✅ **Functional**       | A new dashboard view provides at-a-glance KPIs for daily sales, transactions, new customers, and low-stock items.                   |
-| **Sales & Checkout**              | ✅ **Functional**       | Core sales processing, cart management, split-tender payment collection, and receipt data generation are fully working.                |
-| **Customer Management**           | ✅ **Functional**       | Full CRUD (Create, Read, Update, Deactivate) operations for customers. Table view provides loading and empty-state feedback.        |
-| **Product Management**            | ✅ **Functional**       | Full CRUD operations for products, with responsive, debounced searching. Table view provides loading and empty-state feedback.        |
-| **User & Role Management**        | ✅ **Functional**       | Full CRUD operations for users, including multi-role assignment. Table view provides loading and empty-state feedback.                |
-| **Payment Methods Management**    | ✅ **Functional**       | A new UI in Settings allows for full CRUD operations on payment methods, replacing the previous placeholder.                           |
-| **Inventory Management**          | ✅ **Functional**       | All inventory tables (summary, POs, movements) now provide clear loading/empty state feedback. All core functions are stable.       |
-| **Purchase Orders & Stock-ins**   | ✅ **Functional**       | Creation of Purchase Orders and receiving of items (full or partial) against a PO are fully implemented and update stock levels correctly. |
-| **Reporting & Analytics**         | ✅ **Functional**       | Backend correctly generates data for all reports. The UI displays reports and allows for PDF/CSV export.                             |
-| **Automated Testing**             | ✅ **Foundational**     | A comprehensive unit test suite now covers all business logic managers and key services, running against an isolated in-memory database. |
-
----
-
-## **3. Architectural Deep Dive**
-
-SG-POS is built on a set of robust architectural principles designed for maintainability and scalability.
-
-### The Layered Architecture
-
-Our architecture strictly separates the application into four logical layers, ensuring that each part of the codebase has a single, well-defined responsibility:
-
-1.  **Presentation Layer (`app/ui`):** Built with PySide6, this layer is responsible *only* for what the user sees and how they interact with it. It contains no business logic. When a user acts, the UI packages the input into a DTO and hands it to the Business Logic Layer via the application's core.
-
-2.  **Business Logic Layer (`app/business_logic`):** The brain of the application. **Managers** (e.g., `SalesManager`) orchestrate workflows, enforce business rules, and make decisions. They use **DTOs** (Data Transfer Objects) as clean data contracts for communication with the UI.
-
-3.  **Data Access Layer (`app/services`):** Implements the **Repository Pattern**. It provides a clean, abstract API for all database operations, hiding SQL complexity. Each service (e.g., `ProductService`) is responsible for querying a specific database entity.
-
-4.  **Persistence Layer (`app/models`):** Defines the database schema using SQLAlchemy ORM models, which map directly to the PostgreSQL tables. This is the only layer aware of the database's table and column structure.
-
-### Module Interaction Flowchart
-
-The flow of control and data is unidirectional and decoupled, ensuring a responsive UI and testable components. The `ApplicationCore` acts as a Dependency Injection (DI) container, providing services and managers to the components that need them. The following diagram illustrates the flow for finalizing a sale.
-
-```mermaid
-graph TD
-    subgraph "Main Thread (GUI)"
-        direction LR
-        A[User clicks 'Finalize Sale' in PaymentDialog] --> B[Presentation Layer<br>POSView & PaymentDialog];
-        B --> C{Async Bridge<br>app/core/async_bridge.py};
-        H[UI Callback _on_done] --> I[Update UI<br>Show receipt/success message];
-    end
-
-    subgraph "Worker Thread (Backend)"
-        direction TB
-        D[Business Logic Layer<br>app/business_logic/managers/sales_manager.py] -- Calls --> E[Inventory & Customer Managers];
-        D -- Calls --> F[Data Access Layer<br>app/services/sales_service.py];
-        F -- Uses ORM Models --> G[Persistence Layer<br>app/models/sales.py];
-    end
-    
-    subgraph "Database Server"
-        J[PostgreSQL Database];
-    end
-
-    subgraph "Core Components (DI)"
-        K[ApplicationCore<br>app/core/application_core.py];
-    end
-
-    %% Flow of Control and Data
-    C -- "1. Submits 'finalize_sale' Coroutine" --> D;
-    K -- "Provides Service/Manager Dependencies" --> D;
-    E -- "Coordinates stock deduction" --> D;
-    G -- "Maps to Tables" --> J;
-    F -- "2. Executes Atomic Transaction (INSERTs/UPDATEs)" --> J;
-    J -- "3. Returns Saved Records" --> F;
-    F -- "4. Returns ORM Models" --> D;
-    D -- "5. Wraps Result in FinalizedSaleDTO" --> C;
-    C -- "6. Emits 'callback_ready' Signal to Main Thread" --> H;
-
-    style A fill:#cde4ff
-    style I fill:#d5e8d4
-```
-
-This flow ensures that the UI (main thread) is never blocked. The `Async Bridge` offloads the heavy work (steps D, E, F, G, J) to a background thread, and the UI is only updated via a safe callback once all the work is complete.
-
----
-
-## **4. Codebase Deep Dive**
-
-A well-organized file structure is paramount for navigating and maintaining a complex codebase. The SG-POS project adheres to a standard, logical layout that reinforces the architectural layers.
-
-### Project File Hierarchy
-
-```
-sg-pos-system/
-│
-├── .env.example                # Template for environment variables
-├── .gitignore                  # Specifies files/directories to ignore in Git
-├── alembic.ini                 # Configuration for Alembic database migrations
-├── docker-compose.dev.yml      # Defines the PostgreSQL database service for Docker
-├── pyproject.toml              # Project metadata, dependencies, and tool settings (Poetry)
-│
-├── app/                        # --- Main Application Source Code ---
-│   ├── __init__.py
-│   ├── main.py                 # Application entry point; initializes core and UI
-│   │
-│   ├── core/                   # Architectural backbone and cross-cutting concerns
-│   ├── business_logic/         # Business Logic Layer
-│   │   ├── dto/                # Data Transfer Objects (Pydantic models)
-│   │   └── managers/           # Business workflow and rule orchestrators
-│   ├── models/                 # Persistence Layer
-│   ├── services/               # Data Access Layer
-│   └── ui/                     # Presentation Layer
-│       ├── dialogs/            # QDialog classes for specific tasks
-│       ├── resources/          # QSS stylesheets, icons, etc.
-│       ├── views/              # Main QWidget screens (Dashboard, POS, etc.)
-│       └── widgets/            # Reusable custom widgets (KpiWidget, ManagedTableView)
-│
-├── migrations/                 # Alembic auto-generated migration scripts
-│   ├── versions/
-│   └── env.py
-│
-├── scripts/                    # Utility scripts for development
-│   └── database/
-│       ├── schema.sql          # A complete, plain SQL snapshot of the target schema
-│       └── seed_data.py        # Script to populate a fresh database with initial data
-│
-└── tests/                      # Automated Test Suite
-    ├── conftest.py             # Pytest fixtures and test environment setup
-    ├── factories.py            # factory-boy definitions for creating test data
-    └── unit/                   # Unit tests, mirroring the `app` directory structure
-```
-
-### Key File & Directory Descriptions
-
-| Path                             | Description                                                                                              |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `pyproject.toml`                 | **Project Definition.** Manages all dependencies (e.g., `PySide6`, `SQLAlchemy`), project metadata, and development tool configurations (`pytest`, `black`, `ruff`).     |
-| `docker-compose.dev.yml`         | **Database Service.** Defines and configures the PostgreSQL database container for local development.        |
-| `alembic.ini` / `migrations/`    | **Database Migrations.** Configuration and scripts for managing database schema evolution using Alembic. This allows for safe, version-controlled updates to the database structure. |
-| `app/main.py`                    | **Application Entry Point.** The script to run. It initializes the `ApplicationCore`, creates the `MainWindow`, and starts the Qt event loop.        |
-| `app/core/`                      | **The Backbone.** Contains the application's most critical, non-domain-specific code. This includes the `ApplicationCore` (the Dependency Injection container), the `async_bridge` for non-blocking UI operations, `config.py` for loading environment settings, and the `Result` pattern for robust error handling. |
-| `app/models/`                    | **Persistence Layer.** Defines all SQLAlchemy ORM models, mirroring the database tables. Each file corresponds to a domain (e.g., `product.py`, `sales.py`), and each class within is a table. This is the single source of truth for the database schema.               |
-| `app/services/`                  | **Data Access Layer.** Implements the Repository pattern; contains all database query logic. Services are responsible for translating high-level requests (e.g., "find product by SKU") into SQLAlchemy queries. They abstract all database complexity from the rest of the application.         |
-| `app/business_logic/managers/`   | **Business Logic Layer.** The brain of the application. Managers orchestrate complex workflows (e.g., finalizing a sale involves inventory, payments, and sales records), enforce business rules (e.g., stock levels cannot be negative), and coordinate with multiple services.        |
-| `app/business_logic/dto/`        | **Data Contracts.** Contains all Pydantic models used as Data Transfer Objects. These DTOs define the shape of data passed between the UI and the Business Logic Layer, creating a clean, validated, and decoupled interface.           |
-| `app/ui/views/`                  | **Main UI Screens.** The primary user-facing views like the `DashboardView`, `POSView`, and data management screens (`ProductView`, `CustomerView`). Each view is a self-contained `QWidget`. |
-| `app/ui/widgets/`                | **Reusable Components.** Contains custom widgets designed to be used across multiple views to ensure a consistent look and feel. The `ManagedTableView` (which provides loading/empty states) and `KpiWidget` (for the dashboard) are key examples that significantly enhance the UX. |
-| `tests/`                         | **Automated Tests.** The complete unit test suite. `conftest.py` configures the test environment to use a fast, in-memory SQLite database, ensuring tests are isolated and reliable. `factories.py` provides tools to easily generate test data. |
-
----
-
-## **5. Technology Stack**
-
-This project uses a modern, professional-grade technology stack chosen for performance, reliability, and developer productivity.
-
-| Category          | Technology                                         | Rationale                                                                                                   |
-| ----------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Language**      | Python 3.11+                                       | Modern features, performance improvements, and strong ecosystem.                                            |
-| **GUI Framework** | PySide6 (Qt 6)                                     | The gold standard for professional, high-performance, cross-platform desktop applications in Python.        |
-| **Database**      | PostgreSQL 16+                                     | Unmatched reliability, scalability, and feature set for handling critical business and financial data.      |
-| **ORM**           | SQLAlchemy 2.0                                     | Industry-leading Object-Relational Mapper with powerful features and excellent async support.               |
-| **DB Migrations** | Alembic                                            | The standard for managing database schema changes with SQLAlchemy.                                          |
-| **Async**         | `asyncio`, `greenlet`                              | Python's native concurrency library, augmented with `greenlet` for seamless SQLAlchemy async operations.     |
-| **Testing**       | `pytest`, `pytest-asyncio`, `aiosqlite`            | A powerful and flexible testing ecosystem for testing all aspects of the application against an in-memory DB. |
-| **Packaging**     | Poetry                                             | Modern, reliable dependency management and packaging that guarantees reproducible environments.             |
-| **Code Quality**  | Black (Formatter), Ruff (Linter), MyPy (Type Checker)| A trifecta of tools to enforce code style, catch bugs early, and ensure long-term maintainability.          |
-
----
-
-## **6. Developer Setup & Deployment Guide**
-
-This guide provides step-by-step instructions to set up a complete local development environment for the SG-POS application from scratch.
-
-### Prerequisites
-
-*   **Git:** For version control. [Install Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
-*   **Python 3.11+:** Make sure it's installed and available in your system's `PATH`. [Install Python](https://www.python.org/downloads/).
-*   **Poetry:** For managing dependencies. See the [official installation guide](https://python-poetry.org/docs/#installation).
-*   **Docker & Docker Compose:** To run the PostgreSQL database in a container. [Install Docker Desktop](https://www.docker.com/products/docker-desktop/).
-
-### Step-by-Step Setup Guide
-
-1.  **Clone the Repository**
-    Open your terminal or command prompt and clone the project from GitHub.
-    ```bash
-    git clone https://github.com/your-org/sg-pos-system.git
-    cd sg-pos-system
-    ```
-
-2.  **Configure Environment Variables**
-    The application uses a `.env.dev` file for local configuration. Copy the provided template. The default values are already configured to connect to the Docker database.
-    ```bash
-    cp .env.example .env.dev
-    ```
-
-3.  **Start the Database Server**
-    This command reads the `docker-compose.dev.yml` file, downloads the official PostgreSQL image, and starts the database server in a container. It will run in the background and expose the database on `localhost:5432`.
-    ```bash
-    docker compose -f docker-compose.dev.yml up -d
-    ```
-    You can check that it's running with `docker ps`.
-
-4.  **Install Project Dependencies**
-    This command reads the `pyproject.toml` file, creates a dedicated virtual environment for the project, and installs all production and development packages (like `pytest` and `black`).
-    ```bash
-    poetry install
-    ```
-
-5.  **Activate the Virtual Environment**
-    To use the installed packages, you must activate the virtual environment created by Poetry. All subsequent commands must be run inside this environment.
-    ```bash
-    poetry shell
-    ```
-    Your command prompt should now be prefixed with the environment name (e.g., `(sg-pos-system-py3.11)`).
-
-6.  **Apply Database Migrations**
-    This is a critical step. The command connects to the running PostgreSQL database and uses Alembic to create all the necessary tables, indexes, and constraints within the `sgpos` schema.
-    ```bash
-    alembic upgrade head
-    ```
-
-7.  **Seed Initial Data (Crucial First-Time Step)**
-    A fresh database is empty. This script populates it with the essential data required to run the application, including the default company, an admin user, and the main outlet.
-    ```bash
-    python scripts/database/seed_data.py
-    ```
-
-8.  **Run the Application**
-    You are now ready to launch the POS system. The main window should appear.
-    ```bash
-    python app/main.py
-    ```
-
-## 7. Running the Test Suite
-A key feature of this codebase is its comprehensive and reliable test suite. Running the tests is a critical step to ensure that your changes have not introduced any regressions.
-
-*   **Run all tests:** To ensure the entire application logic is sound, run the following command from the project root (inside the `poetry shell`):
-  ```bash
-  pytest
-  ```
-  This will discover and run all tests in the `tests/` directory against an isolated, in-memory SQLite database, providing fast and reliable feedback.
-
-*   **Check Test Coverage:** To see which parts of the application are covered by tests, you can generate a report in your terminal or as a more detailed HTML report:
-  ```bash
-  # For a quick summary in the terminal
-  pytest --cov=app
-
-  # For a detailed, browsable HTML report
-  pytest --cov=app --cov-report=html
-  ```
-  After running the second command, open the generated `htmlcov/index.html` file in your browser to explore coverage line by line.
-
-## **8. User Guide: Running the Application**
-
-Once the application is running, here is a brief guide on how to use its core features:
-
-*   **Navigation:** Use the menu bar at the top of the window (`Dashboard`, `POS`, `Data Management`, etc.) to switch between the different sections of the application. The application uses lazy-loading, so views are only created the first time you navigate to them, ensuring a fast startup.
-*   **Dashboard:** The Dashboard is the first view you might want to check. Navigate via `Dashboard > Show Dashboard`. It provides a live look at today's sales, transaction counts, and other key metrics. It automatically refreshes with the latest data each time you view it.
-*   **Making a Sale:**
-    1.  Navigate to `POS > Sales Screen`. This is the default view on startup.
-    2.  Use the product search bar to find an item by its SKU or name and click **"Add to Cart"**. The item will appear in the cart on the left.
-    3.  Once all items are added, click the green **"PAY"** button.
-    4.  In the `Process Payment` dialog, select a payment method, enter the amount tendered, and click **"Add Payment"**. You can add multiple payments for split-tender transactions.
-    5.  Once the balance is zero or less, click **"Finalize Sale"**. A success message will appear, and the cart will be cleared for the next transaction.
-*   **Managing Data (Products, Customers, etc.):**
-    1.  Navigate to a management screen like `Data Management > Products`.
-    2.  The view will show a "Loading..." message and then display the data. If no data exists, it will show an informative "No products found" message. This stateful feedback is consistent across all data views.
-    3.  Use the **"Add New"**, **"Edit Selected"**, and **"Deactivate Selected"** buttons to manage records. Double-clicking a row is a shortcut for editing.
-*   **Settings:**
-    1.  Navigate to `Settings > Application Settings`.
-    2.  Here you can manage Company Information, add or edit Users and their roles, and manage Payment Methods.
-
-## **9. Project Roadmap**
-
-With the core features and UI/UX baseline established, the project is well-positioned for future growth.
-
-### Immediate Next Steps (v1.6+)
-
-*   **Expand Test Coverage:** Continue to build out the test suite, focusing on the data access (service) layer and adding basic UI tests with `pytest-qt` to validate signal/slot connections and dialog behavior.
-*   **Advanced Promotions Module:** Implement logic for complex discounts (e.g., "Buy One Get One", tiered discounts, customer-group-specific pricing). This would involve new models and a dedicated `PromotionManager`.
-*   **Global Status Bar:** Add a `QStatusBar` to the `MainWindow` to provide non-intrusive feedback for operations like saving data or connection status, improving the user's awareness of background activities.
-*   **Refine Dashboard:** Add more KPIs and simple charts (e.g., a bar chart for weekly sales) to the dashboard. This would involve enhancing the `ReportService` with more aggregation queries.
-*   **Improve Search UX:** Implement the debouncing `QTimer` pattern (currently in `ProductView`) across all other searchable views (`CustomerView`, `InventoryView`) to improve performance and reduce database load.
-
-### Long-Term Vision (v2.0+)
-
-*   **Multi-Location Inventory:** Build features for transferring stock between different outlets, including transfer orders and in-transit tracking. This would require significant additions to the `InventoryManager` and new UI views.
-*   **Full Accounting Module:** Expand the accounting models to support a full double-entry ledger, accounts payable/receivable, and automated journal entries from sales and purchases. This would transform the application into a lightweight ERP system.
-*   **E-commerce Connector:** Develop an integration with platforms like Shopify or WooCommerce to sync products, orders, and inventory levels in real-time. This would likely involve creating a new `integrations` sub-package.
-*   **Cloud Backend:** Architect a cloud-based version of the backend logic, exposing it via a REST or GraphQL API. This would enable the creation of a mobile companion app (for stock-takes or mobile sales) and a web-based reporting dashboard for business owners to access from anywhere.
-*   **Enhanced Hardware Support:** Add direct support for receipt printers, cash drawers, and barcode scanners using libraries that interface with serial or USB ports.
-
----
-
-## **10. How to Contribute**
-
-We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is valued. Please see the [`CONTRIBUTING.md`](CONTRIBUTING.md) file for detailed guidelines on our development process and how to submit a pull request. All participants are expected to adhere to our [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
-
----
-
-## **11. License**
-
-This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty. See the `LICENSE` file for full details.
 
 ```
 
