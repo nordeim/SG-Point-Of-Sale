@@ -12,28 +12,29 @@ from app.services.base_service import BaseService
 
 if TYPE_CHECKING:
     from app.core.application_core import ApplicationCore
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 class CompanyService(BaseService):
     """Handles database interactions for Company models."""
     def __init__(self, core: "ApplicationCore"):
         super().__init__(core, Company)
 
-    async def get_by_registration_number(self, registration_number: str) -> Result[Company | None, str]:
+    async def get_by_registration_number(self, registration_number: str, session: Optional[AsyncSession] = None) -> Result[Company | None, str]:
         """Fetches a company by its unique registration number."""
         try:
-            async with self.core.get_session() as session:
+            async with self._get_session_context(session) as active_session:
                 stmt = select(self.model).where(self.model.registration_number == registration_number)
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 return Success(result.scalar_one_or_none())
         except Exception as e:
             return Failure(f"Database error fetching company by registration number: {e}")
 
-    async def get_by_gst_number(self, gst_number: str) -> Result[Company | None, str]:
+    async def get_by_gst_number(self, gst_number: str, session: Optional[AsyncSession] = None) -> Result[Company | None, str]:
         """Fetches a company by its unique GST registration number."""
         try:
-            async with self.core.get_session() as session:
+            async with self._get_session_context(session) as active_session:
                 stmt = select(self.model).where(self.model.gst_registration_number == gst_number)
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 return Success(result.scalar_one_or_none())
         except Exception as e:
             return Failure(f"Database error fetching company by GST number: {e}")
@@ -44,12 +45,12 @@ class OutletService(BaseService):
     def __init__(self, core: "ApplicationCore"):
         super().__init__(core, Outlet)
 
-    async def get_all_by_company(self, company_id: UUID) -> Result[List[Outlet], str]:
+    async def get_all_by_company(self, company_id: UUID, session: Optional[AsyncSession] = None) -> Result[List[Outlet], str]:
         """Fetches all active outlets for a specific company."""
         try:
-            async with self.core.get_session() as session:
+            async with self._get_session_context(session) as active_session:
                 stmt = select(Outlet).where(Outlet.company_id == company_id, Outlet.is_active == True).order_by(Outlet.name)
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 return Success(result.scalars().all())
         except Exception as e:
             return Failure(f"Database error fetching outlets for company {company_id}: {e}")

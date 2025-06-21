@@ -93,13 +93,14 @@ class InventoryManager(BaseManager):
         """Creates a new purchase order, including its line items."""
         try:
             async with self.core.get_session() as session:
-                supplier_result = await self.supplier_service.get_by_id(dto.supplier_id)
+                # FIX: Pass the session to all service calls within the transaction block.
+                supplier_result = await self.supplier_service.get_by_id(dto.supplier_id, session)
                 if isinstance(supplier_result, Failure) or supplier_result.value is None: raise Exception("Supplier not found.")
 
                 po_total_amount = Decimal("0.0")
                 po_items: List[PurchaseOrderItem] = []
                 for item_dto in dto.items:
-                    product_result = await self.product_service.get_by_id(item_dto.product_id)
+                    product_result = await self.product_service.get_by_id(item_dto.product_id, session)
                     if isinstance(product_result, Failure) or product_result.value is None: raise Exception(f"Product {item_dto.product_id} not found.")
                     po_items.append(PurchaseOrderItem(**item_dto.dict()))
                     po_total_amount += item_dto.quantity_ordered * item_dto.unit_cost
@@ -113,7 +114,7 @@ class InventoryManager(BaseManager):
                 save_po_result = await self.purchase_order_service.create_full_purchase_order(new_po, session)
                 if isinstance(save_po_result, Failure): raise Exception(save_po_result.error)
 
-                return await self._create_po_dto(save_po_result.value, supplier_result.value.name)
+                return await self._create_po_dto(save_po_result.value, supplier_result.value.name, session)
         except Exception as e:
             return Failure(f"Failed to create purchase order: {e}")
 
@@ -183,15 +184,15 @@ class InventoryManager(BaseManager):
         if isinstance(result, Failure):
             return result
         
-        # Convert raw dicts from the service into strongly-typed DTOs
         return Success([StockMovementDTO(**row) for row in result.value])
 
-    async def _create_po_dto(self, po: PurchaseOrder, supplier_name: str) -> Result[PurchaseOrderDTO, str]:
+    async def _create_po_dto(self, po: PurchaseOrder, supplier_name: str, session: Optional["AsyncSession"] = None) -> Result[PurchaseOrderDTO, str]:
         """Helper to construct a PurchaseOrderDTO from an ORM object."""
         items_dto: List[PurchaseOrderItemDTO] = []
         if po.items:
             product_ids = [item.product_id for item in po.items]
-            products_res = await self.product_service.get_by_ids(product_ids)
+            # FIX: Pass session to service call
+            products_res = await self.product_service.get_by_ids(product_ids, session)
             if isinstance(products_res, Failure): return products_res
             products_map = {p.id: p for p in products_res.value}
 

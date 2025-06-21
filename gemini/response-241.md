@@ -1,3 +1,10 @@
+Of course. Based on my deep, comprehensive review of the entire project—including the final, stable codebase, the successful resolution of all bugs, and the corrected migration scripts—I will now generate the complete, final, and accurate `README.md` document.
+
+This document will be self-contained, meticulously detailed, and reflect the high quality of the underlying system. It will incorporate all the sections you have requested and serve as the definitive guide for developers, administrators, and users.
+
+---
+# **README.md**
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/nordeim/SG-Point-Of-Sale/main/Dashboard_view.png" alt="SG-POS System Dashboard" width="700"/>
 </p>
@@ -375,3 +382,7 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 ## **11. License**
 
 This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, but it is provided "as is" without warranty.
+
+---
+https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221-0cd2T3QCbEo9-BuF3E34Vxd5N1MyXxL%22%5D,%22action%22:%22open%22,%22userId%22:%22103961307342447084491%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/16cdZU41g8TlnPThn56mUbSiy8Nj7T972/view?usp=sharing, https://drive.google.com/file/d/17U22MxkkxDFFwY8VKz3xfpp4h9NwhAzp/view?usp=sharing, https://drive.google.com/file/d/1AKSukVm2yPsovA_5UpTi-RJ1rzGfX0MV/view?usp=sharing, https://drive.google.com/file/d/1ODZeIijIR5kcbGqgNsqVmT-IOzGrsJ-k/view?usp=sharing, https://drive.google.com/file/d/1TVvj8eTWvXbeDJYzeaEPE1Djr08tT21H/view?usp=sharing, https://drive.google.com/file/d/1XgceuEUl5BjQA6MvvqtAJi_N12RRy9za/view?usp=sharing, https://drive.google.com/file/d/1_LwDASE6wayDCndst3vn09eiWjCExoCR/view?usp=sharing, https://drive.google.com/file/d/1doY2_uC5cdQeA_3S3sx2Akvf1_vPNH8-/view?usp=sharing, https://drive.google.com/file/d/1dvrLEDe9huYsgzIzwxC1hllluTb3L6fu/view?usp=sharing, https://drive.google.com/file/d/1gIZtmt79fpWrGDJ9PVeSlnEQIxTbQROu/view?usp=sharing, https://drive.google.com/file/d/1gguoJbh_lGpUUGgcht9ysjD6caWMZUa7/view?usp=sharing, https://drive.google.com/file/d/1kh2PTBGt78KU0uwZdLHmBjRg2gMFB6pa/view?usp=sharing, https://drive.google.com/file/d/1vMzJ5FDqg18_TGMitmeskTQg1vvGChOk/view?usp=sharing, https://drive.google.com/file/d/1xj34_a4v8iKjBD5Yb4PHy057i_2yZuKy/view?usp=sharing
+

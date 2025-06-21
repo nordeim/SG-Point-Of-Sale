@@ -6,17 +6,17 @@ This migration creates all tables for the SG-POS system as defined in the
 app/models/ directory. It ensures that all columns, data types, constraints,
 and relationships are correctly established in a new database.
 
-This version fixes the following discrepancies from a typical auto-generated file:
+This version fixes the following discrepancies from the original auto-generated file:
 - Adds the missing 'reference_type' column to the 'stock_movements' table.
+- Adds the missing 'variant_id' column, foreign key, and index to 'purchase_order_items' and 'sales_transaction_items'.
 - Corrects the unique constraints on 'purchase_order_items' and 'sales_transaction_items' to include 'variant_id'.
-- Adds correct CHECK constraints for status enums on various tables.
+- Adds missing timestamp columns to the 'journal_entry_lines' table.
 - Corrects the CHECK constraint on 'journal_entry_lines' to accurately reflect accounting principles (debit or credit, not both).
-- Removes the erroneous 'updated_at' column from the immutable 'payments' table.
-- Adds the correct server-side default for products.gst_rate.
+- Removes the erroneous 'updated_at' column from the immutable 'payments' table to match the ORM.
 
 Revision ID: d5a6759ef2f7
 Revises: 
-Create Date: 2025-06-21 09:30:00.000000
+Create Date: 2025-06-19 10:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
@@ -44,9 +44,9 @@ def upgrade() -> None:
         sa.Column('address', sa.Text(), nullable=True),
         sa.Column('phone', sa.String(length=20), nullable=True),
         sa.Column('email', sa.String(length=255), nullable=True),
-        sa.Column('base_currency', sa.String(length=3), nullable=False, server_default='SGD'),
+        sa.Column('base_currency', sa.String(length=3), nullable=False),
         sa.Column('fiscal_year_start', sa.Date(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_companies')),
@@ -72,7 +72,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('address', sa.Text(), nullable=True),
         sa.Column('phone', sa.String(length=20), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_outlets_company_id_companies'), ondelete='RESTRICT'),
@@ -80,7 +80,7 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'code', name='uq_outlet_company_code'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_outlets_company_id'), 'outlets', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_outlets_company_id'), 'outlets', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('users',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -89,7 +89,7 @@ def upgrade() -> None:
         sa.Column('email', sa.String(length=255), nullable=False),
         sa.Column('password_hash', sa.String(length=255), nullable=False),
         sa.Column('full_name', sa.String(length=255), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('last_login_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -99,19 +99,20 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'username', name='uq_user_company_username'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_users_company_id'), 'users', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_users_company_id'), 'users', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('roles',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('company_id', sa.UUID(), nullable=False),
         sa.Column('name', sa.String(length=50), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('is_system_role', sa.Boolean(), nullable=False, server_default=sa.text('false')),
+        sa.Column('is_system_role', sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_roles_company_id_companies'), ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_roles')),
         sa.UniqueConstraint('company_id', 'name', name='uq_role_company_name'),
         schema='sgpos'
     )
+    op.create_index(op.f('ix_sgpos_roles_company_id'), 'roles', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('categories',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -126,7 +127,7 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'name', name='uq_category_company_name'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_categories_company_id'), 'categories', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_categories_company_id'), 'categories', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('suppliers',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -136,7 +137,7 @@ def upgrade() -> None:
         sa.Column('email', sa.String(length=255), nullable=True),
         sa.Column('phone', sa.String(length=50), nullable=True),
         sa.Column('address', sa.Text(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_suppliers_company_id_companies'), ondelete='RESTRICT'),
@@ -144,7 +145,7 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'name', name='uq_supplier_company_name'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_suppliers_company_id'), 'suppliers', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_suppliers_company_id'), 'suppliers', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('customers',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -154,9 +155,9 @@ def upgrade() -> None:
         sa.Column('email', sa.String(length=255), nullable=True),
         sa.Column('phone', sa.String(length=50), nullable=True),
         sa.Column('address', sa.Text(), nullable=True),
-        sa.Column('loyalty_points', sa.Integer(), nullable=False, server_default=sa.text('0')),
-        sa.Column('credit_limit', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('loyalty_points', sa.Integer(), nullable=False),
+        sa.Column('credit_limit', sa.Numeric(precision=19, scale=2), nullable=False),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_customers_company_id_companies'), ondelete='RESTRICT'),
@@ -165,7 +166,7 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'email', name='uq_customer_company_email'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_customers_company_id'), 'customers', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_customers_company_id'), 'customers', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('chart_of_accounts',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -174,7 +175,7 @@ def upgrade() -> None:
         sa.Column('account_name', sa.String(length=255), nullable=False),
         sa.Column('account_type', sa.String(length=50), nullable=False),
         sa.Column('parent_id', sa.UUID(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.CheckConstraint("account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')", name=op.f('ck_chart_of_accounts_chk_account_type')),
@@ -184,15 +185,16 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'account_code', name='uq_coa_company_code'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_chart_of_accounts_company_id'), 'chart_of_accounts', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_chart_of_accounts_parent_id'), 'chart_of_accounts', ['parent_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_chart_of_accounts_company_id'), 'chart_of_accounts', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_chart_of_accounts_parent_id'), 'chart_of_accounts', ['parent_id'], unique=False, schema='sgpos')
+
 
     op.create_table('payment_methods',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('company_id', sa.UUID(), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('type', sa.String(length=50), nullable=False),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.CheckConstraint("type IN ('CASH', 'CARD', 'NETS', 'PAYNOW', 'VOUCHER', 'STORE_CREDIT')", name=op.f('ck_payment_methods_chk_payment_method_type')),
@@ -201,6 +203,7 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'name', name='uq_payment_methods_company_name'),
         schema='sgpos'
     )
+    op.create_index(op.f('ix_sgpos_payment_methods_company_id'), 'payment_methods', ['company_id'], unique=False, schema='sgpos')
 
     op.create_table('audit_logs',
         sa.Column('id', sa.BigInteger(), nullable=False),
@@ -212,15 +215,14 @@ def upgrade() -> None:
         sa.Column('old_values', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('new_values', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('ip_address', postgresql.INET(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_audit_logs_company_id_companies')),
         sa.ForeignKeyConstraint(['user_id'], ['sgpos.users.id'], name=op.f('fk_audit_logs_user_id_users'), ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_audit_logs')),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_audit_logs_company_id'), 'audit_logs', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_audit_logs_record_id'), 'audit_logs', ['record_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_audit_logs_user_id'), 'audit_logs', ['user_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_audit_logs_company_id'), 'audit_logs', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_audit_logs_user_id'), 'audit_logs', ['user_id'], unique=False, schema='sgpos')
 
     # --- Group 3: Tables depending on Group 2 ---
     op.create_table('products',
@@ -232,12 +234,12 @@ def upgrade() -> None:
         sa.Column('barcode', sa.String(length=100), nullable=True),
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('cost_price', sa.Numeric(precision=19, scale=4), nullable=False, server_default=sa.text('0')),
+        sa.Column('cost_price', sa.Numeric(precision=19, scale=4), nullable=False),
         sa.Column('selling_price', sa.Numeric(precision=19, scale=4), nullable=False),
-        sa.Column('gst_rate', sa.Numeric(precision=5, scale=2), nullable=False, server_default=sa.text('9.00')),
-        sa.Column('track_inventory', sa.Boolean(), nullable=False, server_default=sa.text('true')),
-        sa.Column('reorder_point', sa.Integer(), nullable=False, server_default=sa.text('0')),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('gst_rate', sa.Numeric(precision=5, scale=2), nullable=False),
+        sa.Column('track_inventory', sa.Boolean(), nullable=False),
+        sa.Column('reorder_point', sa.Integer(), nullable=False),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['category_id'], ['sgpos.categories.id'], name=op.f('fk_products_category_id_categories')),
@@ -247,10 +249,10 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'sku', name='uq_product_company_sku'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_products_barcode'), 'products', ['barcode'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_products_category_id'), 'products', ['category_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_products_company_id'), 'products', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_products_supplier_id'), 'products', ['supplier_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_products_barcode'), 'products', ['barcode'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_products_category_id'), 'products', ['category_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_products_company_id'), 'products', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_products_supplier_id'), 'products', ['supplier_id'], unique=False, schema='sgpos')
 
     op.create_table('journal_entries',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -260,7 +262,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('reference_type', sa.String(length=50), nullable=True),
         sa.Column('reference_id', sa.UUID(), nullable=True),
-        sa.Column('status', sa.String(length=20), nullable=False, server_default='POSTED'),
+        sa.Column('status', sa.String(length=20), nullable=False),
         sa.Column('created_by_user_id', sa.UUID(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -271,8 +273,10 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'entry_number', name='uq_journal_entry_company_number'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_journal_entries_company_id'), 'journal_entries', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_journal_entries_created_by_user_id'), 'journal_entries', ['created_by_user_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entries_company_id'), 'journal_entries', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entries_created_by_user_id'), 'journal_entries', ['created_by_user_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entries_entry_date'), 'journal_entries', ['entry_date'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entries_reference_id'), 'journal_entries', ['reference_id'], unique=False, schema='sgpos')
 
     op.create_table('role_permissions',
         sa.Column('role_id', sa.UUID(), nullable=False),
@@ -282,6 +286,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('role_id', 'permission_id', name=op.f('pk_role_permissions')),
         schema='sgpos'
     )
+    op.create_index(op.f('ix_sgpos_role_permissions_permission_id'), 'role_permissions', ['permission_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_role_permissions_role_id'), 'role_permissions', ['role_id'], unique=False, schema='sgpos')
 
     op.create_table('user_roles',
         sa.Column('user_id', sa.UUID(), nullable=False),
@@ -293,6 +299,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('user_id', 'role_id', 'outlet_id', name=op.f('pk_user_roles')),
         schema='sgpos'
     )
+    op.create_index(op.f('ix_sgpos_user_roles_outlet_id'), 'user_roles', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_user_roles_role_id'), 'user_roles', ['role_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_user_roles_user_id'), 'user_roles', ['user_id'], unique=False, schema='sgpos')
 
     op.create_table('purchase_orders',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -300,11 +309,11 @@ def upgrade() -> None:
         sa.Column('outlet_id', sa.UUID(), nullable=False),
         sa.Column('supplier_id', sa.UUID(), nullable=False),
         sa.Column('po_number', sa.String(length=50), nullable=False),
-        sa.Column('order_date', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('order_date', sa.DateTime(timezone=True), nullable=False),
         sa.Column('expected_delivery_date', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('status', sa.String(length=20), nullable=False, server_default='DRAFT'),
+        sa.Column('status', sa.String(length=20), nullable=False),
         sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('total_amount', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
+        sa.Column('total_amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.CheckConstraint("status IN ('DRAFT', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')", name=op.f('ck_purchase_orders_chk_purchase_order_status')),
@@ -315,22 +324,22 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'po_number', name='uq_purchase_order_company_po_number'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_purchase_orders_company_id'), 'purchase_orders', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_purchase_orders_outlet_id'), 'purchase_orders', ['outlet_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_purchase_orders_supplier_id'), 'purchase_orders', ['supplier_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_orders_company_id'), 'purchase_orders', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_orders_outlet_id'), 'purchase_orders', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_orders_supplier_id'), 'purchase_orders', ['supplier_id'], unique=False, schema='sgpos')
 
     op.create_table('sales_transactions',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('company_id', sa.UUID(), nullable=False),
         sa.Column('outlet_id', sa.UUID(), nullable=False),
         sa.Column('transaction_number', sa.String(length=50), nullable=False),
-        sa.Column('transaction_date', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('transaction_date', sa.DateTime(timezone=True), nullable=False),
         sa.Column('customer_id', sa.UUID(), nullable=True),
         sa.Column('cashier_id', sa.UUID(), nullable=False),
         sa.Column('subtotal', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('tax_amount', sa.Numeric(precision=19, scale=2), nullable=False),
-        sa.Column('discount_amount', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
-        sa.Column('rounding_adjustment', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
+        sa.Column('discount_amount', sa.Numeric(precision=19, scale=2), nullable=False),
+        sa.Column('rounding_adjustment', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('total_amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('status', sa.String(length=20), nullable=False),
         sa.Column('notes', sa.Text(), nullable=True),
@@ -345,10 +354,12 @@ def upgrade() -> None:
         sa.UniqueConstraint('company_id', 'transaction_number', name='uq_sales_transaction_company_number'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_sales_transactions_cashier_id'), 'sales_transactions', ['cashier_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_sales_transactions_company_id'), 'sales_transactions', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_sales_transactions_customer_id'), 'sales_transactions', ['customer_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_sales_transactions_outlet_id'), 'sales_transactions', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_cashier_id'), 'sales_transactions', ['cashier_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_company_id'), 'sales_transactions', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_customer_id'), 'sales_transactions', ['customer_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_outlet_id'), 'sales_transactions', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transactions_transaction_date'), 'sales_transactions', ['transaction_date'], unique=False, schema='sgpos')
+
 
     # --- Group 4: Tables depending on Group 3 ---
     op.create_table('product_variants',
@@ -359,7 +370,7 @@ def upgrade() -> None:
         sa.Column('attributes', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column('cost_price_override', sa.Numeric(precision=19, scale=4), nullable=True),
         sa.Column('selling_price_override', sa.Numeric(precision=19, scale=4), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['product_id'], ['sgpos.products.id'], name=op.f('fk_product_variants_product_id_products'), ondelete='CASCADE'),
@@ -367,25 +378,25 @@ def upgrade() -> None:
         sa.UniqueConstraint('product_id', 'sku_suffix', name='uq_product_variant_sku_suffix'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_product_variants_product_id'), 'product_variants', ['product_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_product_variants_product_id'), 'product_variants', ['product_id'], unique=False, schema='sgpos')
 
     op.create_table('journal_entry_lines',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('journal_entry_id', sa.UUID(), nullable=False),
         sa.Column('account_id', sa.UUID(), nullable=False),
-        sa.Column('debit_amount', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
-        sa.Column('credit_amount', sa.Numeric(precision=19, scale=2), nullable=False, server_default=sa.text('0')),
+        sa.Column('debit_amount', sa.Numeric(precision=19, scale=2), nullable=False),
+        sa.Column('credit_amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.CheckConstraint('(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)', name='debit_or_credit_check'),
+        sa.CheckConstraint("(debit_amount > 0 AND credit_amount = 0) OR (credit_amount > 0 AND debit_amount = 0)", name=op.f('ck_journal_entry_lines_debit_or_credit_check')),
         sa.ForeignKeyConstraint(['account_id'], ['sgpos.chart_of_accounts.id'], name=op.f('fk_journal_entry_lines_account_id_chart_of_accounts')),
         sa.ForeignKeyConstraint(['journal_entry_id'], ['sgpos.journal_entries.id'], name=op.f('fk_journal_entry_lines_journal_entry_id_journal_entries'), ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_journal_entry_lines')),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_journal_entry_lines_account_id'), 'journal_entry_lines', ['account_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_journal_entry_lines_journal_entry_id'), 'journal_entry_lines', ['journal_entry_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entry_lines_account_id'), 'journal_entry_lines', ['account_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_journal_entry_lines_journal_entry_id'), 'journal_entry_lines', ['journal_entry_id'], unique=False, schema='sgpos')
 
     op.create_table('payments',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -393,14 +404,14 @@ def upgrade() -> None:
         sa.Column('payment_method_id', sa.UUID(), nullable=False),
         sa.Column('amount', sa.Numeric(precision=19, scale=2), nullable=False),
         sa.Column('reference_number', sa.String(length=100), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['payment_method_id'], ['sgpos.payment_methods.id'], name=op.f('fk_payments_payment_method_id_payment_methods')),
         sa.ForeignKeyConstraint(['sales_transaction_id'], ['sgpos.sales_transactions.id'], name=op.f('fk_payments_sales_transaction_id_sales_transactions'), ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_payments')),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_payments_payment_method_id'), 'payments', ['payment_method_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_payments_sales_transaction_id'), 'payments', ['sales_transaction_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_payments_payment_method_id'), 'payments', ['payment_method_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_payments_sales_transaction_id'), 'payments', ['sales_transaction_id'], unique=False, schema='sgpos')
 
     # --- Group 5: Tables depending on Group 4 ---
     op.create_table('inventory',
@@ -408,7 +419,7 @@ def upgrade() -> None:
         sa.Column('outlet_id', sa.UUID(), nullable=False),
         sa.Column('product_id', sa.UUID(), nullable=False),
         sa.Column('variant_id', sa.UUID(), nullable=True),
-        sa.Column('quantity_on_hand', sa.Numeric(precision=15, scale=4), nullable=False, server_default=sa.text('0')),
+        sa.Column('quantity_on_hand', sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['outlet_id'], ['sgpos.outlets.id'], name=op.f('fk_inventory_outlet_id_outlets'), ondelete='RESTRICT'),
@@ -418,9 +429,9 @@ def upgrade() -> None:
         sa.UniqueConstraint('outlet_id', 'product_id', 'variant_id', name='uq_inventory_outlet_product_variant'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_inventory_outlet_id'), 'inventory', ['outlet_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_inventory_product_id'), 'inventory', ['product_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_inventory_variant_id'), 'inventory', ['variant_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_inventory_outlet_id'), 'inventory', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_inventory_product_id'), 'inventory', ['product_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_inventory_variant_id'), 'inventory', ['variant_id'], unique=False, schema='sgpos')
 
     op.create_table('purchase_order_items',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -428,7 +439,7 @@ def upgrade() -> None:
         sa.Column('product_id', sa.UUID(), nullable=False),
         sa.Column('variant_id', sa.UUID(), nullable=True),
         sa.Column('quantity_ordered', sa.Numeric(precision=15, scale=4), nullable=False),
-        sa.Column('quantity_received', sa.Numeric(precision=15, scale=4), nullable=False, server_default=sa.text('0')),
+        sa.Column('quantity_received', sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column('unit_cost', sa.Numeric(precision=19, scale=4), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -439,8 +450,9 @@ def upgrade() -> None:
         sa.UniqueConstraint('purchase_order_id', 'product_id', 'variant_id', name='uq_po_item_po_product_variant'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_purchase_order_items_product_id'), 'purchase_order_items', ['product_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_purchase_order_items_purchase_order_id'), 'purchase_order_items', ['purchase_order_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_order_items_product_id'), 'purchase_order_items', ['product_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_order_items_purchase_order_id'), 'purchase_order_items', ['purchase_order_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_purchase_order_items_variant_id'), 'purchase_order_items', ['variant_id'], unique=False, schema='sgpos')
 
     op.create_table('sales_transaction_items',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -458,8 +470,9 @@ def upgrade() -> None:
         sa.UniqueConstraint('sales_transaction_id', 'product_id', 'variant_id', name='uq_sales_item_transaction_product_variant'),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_sales_transaction_items_product_id'), 'sales_transaction_items', ['product_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_sales_transaction_items_sales_transaction_id'), 'sales_transaction_items', ['sales_transaction_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transaction_items_product_id'), 'sales_transaction_items', ['product_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transaction_items_sales_transaction_id'), 'sales_transaction_items', ['sales_transaction_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_sales_transaction_items_variant_id'), 'sales_transaction_items', ['variant_id'], unique=False, schema='sgpos')
 
     op.create_table('stock_movements',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -473,7 +486,7 @@ def upgrade() -> None:
         sa.Column('reference_type', sa.String(length=50), nullable=True),
         sa.Column('notes', sa.Text(), nullable=True),
         sa.Column('created_by_user_id', sa.UUID(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("movement_type IN ('SALE', 'RETURN', 'PURCHASE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_IN', 'TRANSFER_OUT')", name=op.f('ck_stock_movements_chk_stock_movement_type')),
         sa.ForeignKeyConstraint(['company_id'], ['sgpos.companies.id'], name=op.f('fk_stock_movements_company_id_companies')),
         sa.ForeignKeyConstraint(['created_by_user_id'], ['sgpos.users.id'], name=op.f('fk_stock_movements_created_by_user_id_users')),
@@ -483,78 +496,118 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id', name=op.f('pk_stock_movements')),
         schema='sgpos'
     )
-    op.create_index(op.f('ix_stock_movements_company_id'), 'stock_movements', ['company_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_stock_movements_created_by_user_id'), 'stock_movements', ['created_by_user_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_stock_movements_outlet_id'), 'stock_movements', ['outlet_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_stock_movements_product_id'), 'stock_movements', ['product_id'], unique=False, schema='sgpos')
-    op.create_index(op.f('ix_stock_movements_reference_id'), 'stock_movements', ['reference_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_stock_movements_company_id'), 'stock_movements', ['company_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_stock_movements_created_by_user_id'), 'stock_movements', ['created_by_user_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_stock_movements_outlet_id'), 'stock_movements', ['outlet_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_stock_movements_product_id'), 'stock_movements', ['product_id'], unique=False, schema='sgpos')
+    op.create_index(op.f('ix_sgpos_stock_movements_variant_id'), 'stock_movements', ['variant_id'], unique=False, schema='sgpos')
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
-    # ### commands auto generated by Alembic, adjusted for dependency order ###
-    op.drop_index(op.f('ix_stock_movements_reference_id'), table_name='stock_movements', schema='sgpos')
-    op.drop_index(op.f('ix_stock_movements_product_id'), table_name='stock_movements', schema='sgpos')
-    op.drop_index(op.f('ix_stock_movements_outlet_id'), table_name='stock_movements', schema='sgpos')
-    op.drop_index(op.f('ix_stock_movements_created_by_user_id'), table_name='stock_movements', schema='sgpos')
-    op.drop_index(op.f('ix_stock_movements_company_id'), table_name='stock_movements', schema='sgpos')
+    # ### commands auto generated by Alembic - adjusted for correctness and dependency order ###
+    # The order of dropping tables is the reverse of the creation order to respect FK constraints.
+
+    # --- Drop Group 5 ---
+    op.drop_index(op.f('ix_sgpos_stock_movements_variant_id'), table_name='stock_movements', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_stock_movements_product_id'), table_name='stock_movements', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_stock_movements_outlet_id'), table_name='stock_movements', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_stock_movements_created_by_user_id'), table_name='stock_movements', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_stock_movements_company_id'), table_name='stock_movements', schema='sgpos')
     op.drop_table('stock_movements', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transaction_items_sales_transaction_id'), table_name='sales_transaction_items', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transaction_items_product_id'), table_name='sales_transaction_items', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_sales_transaction_items_variant_id'), table_name='sales_transaction_items', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transaction_items_sales_transaction_id'), table_name='sales_transaction_items', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transaction_items_product_id'), table_name='sales_transaction_items', schema='sgpos')
     op.drop_table('sales_transaction_items', schema='sgpos')
-    op.drop_index(op.f('ix_purchase_order_items_purchase_order_id'), table_name='purchase_order_items', schema='sgpos')
-    op.drop_index(op.f('ix_purchase_order_items_product_id'), table_name='purchase_order_items', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_purchase_order_items_variant_id'), table_name='purchase_order_items', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_purchase_order_items_purchase_order_id'), table_name='purchase_order_items', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_purchase_order_items_product_id'), table_name='purchase_order_items', schema='sgpos')
     op.drop_table('purchase_order_items', schema='sgpos')
-    op.drop_index(op.f('ix_inventory_variant_id'), table_name='inventory', schema='sgpos')
-    op.drop_index(op.f('ix_inventory_product_id'), table_name='inventory', schema='sgpos')
-    op.drop_index(op.f('ix_inventory_outlet_id'), table_name='inventory', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_inventory_variant_id'), table_name='inventory', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_inventory_product_id'), table_name='inventory', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_inventory_outlet_id'), table_name='inventory', schema='sgpos')
     op.drop_table('inventory', schema='sgpos')
-    op.drop_index(op.f('ix_payments_sales_transaction_id'), table_name='payments', schema='sgpos')
-    op.drop_index(op.f('ix_payments_payment_method_id'), table_name='payments', schema='sgpos')
+
+    # --- Drop Group 4 ---
+    op.drop_index(op.f('ix_sgpos_payments_sales_transaction_id'), table_name='payments', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_payments_payment_method_id'), table_name='payments', schema='sgpos')
     op.drop_table('payments', schema='sgpos')
-    op.drop_index(op.f('ix_journal_entry_lines_journal_entry_id'), table_name='journal_entry_lines', schema='sgpos')
-    op.drop_index(op.f('ix_journal_entry_lines_account_id'), table_name='journal_entry_lines', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_journal_entry_lines_journal_entry_id'), table_name='journal_entry_lines', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_journal_entry_lines_account_id'), table_name='journal_entry_lines', schema='sgpos')
     op.drop_table('journal_entry_lines', schema='sgpos')
-    op.drop_index(op.f('ix_product_variants_product_id'), table_name='product_variants', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_product_variants_product_id'), table_name='product_variants', schema='sgpos')
     op.drop_table('product_variants', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transactions_outlet_id'), table_name='sales_transactions', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transactions_customer_id'), table_name='sales_transactions', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transactions_company_id'), table_name='sales_transactions', schema='sgpos')
-    op.drop_index(op.f('ix_sales_transactions_cashier_id'), table_name='sales_transactions', schema='sgpos')
+
+    # --- Drop Group 3 ---
+    op.drop_index(op.f('ix_sgpos_sales_transactions_transaction_date'), table_name='sales_transactions', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transactions_outlet_id'), table_name='sales_transactions', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transactions_customer_id'), table_name='sales_transactions', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transactions_company_id'), table_name='sales_transactions', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_sales_transactions_cashier_id'), table_name='sales_transactions', schema='sgpos')
     op.drop_table('sales_transactions', schema='sgpos')
-    op.drop_index(op.f('ix_purchase_orders_supplier_id'), table_name='purchase_orders', schema='sgpos')
-    op.drop_index(op.f('ix_purchase_orders_outlet_id'), table_name='purchase_orders', schema='sgpos')
-    op.drop_index(op.f('ix_purchase_orders_company_id'), table_name='purchase_orders', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_purchase_orders_supplier_id'), table_name='purchase_orders', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_purchase_orders_outlet_id'), table_name='purchase_orders', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_purchase_orders_company_id'), table_name='purchase_orders', schema='sgpos')
     op.drop_table('purchase_orders', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_user_roles_user_id'), table_name='user_roles', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_user_roles_role_id'), table_name='user_roles', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_user_roles_outlet_id'), table_name='user_roles', schema='sgpos')
     op.drop_table('user_roles', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_role_permissions_role_id'), table_name='role_permissions', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_role_permissions_permission_id'), table_name='role_permissions', schema='sgpos')
     op.drop_table('role_permissions', schema='sgpos')
-    op.drop_index(op.f('ix_journal_entries_created_by_user_id'), table_name='journal_entries', schema='sgpos')
-    op.drop_index(op.f('ix_journal_entries_company_id'), table_name='journal_entries', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_journal_entries_reference_id'), table_name='journal_entries', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_journal_entries_entry_date'), table_name='journal_entries', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_journal_entries_created_by_user_id'), table_name='journal_entries', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_journal_entries_company_id'), table_name='journal_entries', schema='sgpos')
     op.drop_table('journal_entries', schema='sgpos')
-    op.drop_index(op.f('ix_products_supplier_id'), table_name='products', schema='sgpos')
-    op.drop_index(op.f('ix_products_company_id'), table_name='products', schema='sgpos')
-    op.drop_index(op.f('ix_products_category_id'), table_name='products', schema='sgpos')
-    op.drop_index(op.f('ix_products_barcode'), table_name='products', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_products_supplier_id'), table_name='products', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_products_company_id'), table_name='products', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_products_category_id'), table_name='products', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_products_barcode'), table_name='products', schema='sgpos')
     op.drop_table('products', schema='sgpos')
-    op.drop_index(op.f('ix_audit_logs_user_id'), table_name='audit_logs', schema='sgpos')
-    op.drop_index(op.f('ix_audit_logs_record_id'), table_name='audit_logs', schema='sgpos')
-    op.drop_index(op.f('ix_audit_logs_company_id'), table_name='audit_logs', schema='sgpos')
+
+    # --- Drop Group 2 ---
+    op.drop_index(op.f('ix_sgpos_audit_logs_user_id'), table_name='audit_logs', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_audit_logs_company_id'), table_name='audit_logs', schema='sgpos')
     op.drop_table('audit_logs', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_payment_methods_company_id'), table_name='payment_methods', schema='sgpos')
     op.drop_table('payment_methods', schema='sgpos')
-    op.drop_index(op.f('ix_chart_of_accounts_parent_id'), table_name='chart_of_accounts', schema='sgpos')
-    op.drop_index(op.f('ix_chart_of_accounts_company_id'), table_name='chart_of_accounts', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_chart_of_accounts_parent_id'), table_name='chart_of_accounts', schema='sgpos')
+    op.drop_index(op.f('ix_sgpos_chart_of_accounts_company_id'), table_name='chart_of_accounts', schema='sgpos')
     op.drop_table('chart_of_accounts', schema='sgpos')
-    op.drop_index(op.f('ix_customers_company_id'), table_name='customers', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_customers_company_id'), table_name='customers', schema='sgpos')
     op.drop_table('customers', schema='sgpos')
-    op.drop_index(op.f('ix_suppliers_company_id'), table_name='suppliers', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_suppliers_company_id'), table_name='suppliers', schema='sgpos')
     op.drop_table('suppliers', schema='sgpos')
-    op.drop_index(op.f('ix_categories_company_id'), table_name='categories', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_categories_company_id'), table_name='categories', schema='sgpos')
     op.drop_table('categories', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_roles_company_id'), table_name='roles', schema='sgpos')
     op.drop_table('roles', schema='sgpos')
-    op.drop_index(op.f('ix_users_company_id'), table_name='users', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_users_company_id'), table_name='users', schema='sgpos')
     op.drop_table('users', schema='sgpos')
-    op.drop_index(op.f('ix_outlets_company_id'), table_name='outlets', schema='sgpos')
+
+    op.drop_index(op.f('ix_sgpos_outlets_company_id'), table_name='outlets', schema='sgpos')
     op.drop_table('outlets', schema='sgpos')
+
+    # --- Drop Group 1 ---
     op.drop_table('permissions', schema='sgpos')
     op.drop_table('companies', schema='sgpos')
     

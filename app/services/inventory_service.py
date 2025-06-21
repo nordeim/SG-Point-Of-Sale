@@ -11,7 +11,7 @@ from app.core.result import Result, Success, Failure
 from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
 from app.models.user import User
-from app.models.company import Outlet # FIX: Import Outlet model for join
+from app.models.company import Outlet
 from app.services.base_service import BaseService
 
 if TYPE_CHECKING:
@@ -27,22 +27,24 @@ class InventoryService(BaseService):
 
     async def get_stock_level(self, outlet_id: UUID, product_id: UUID, variant_id: Optional[UUID], session: Optional[AsyncSession] = None) -> Result[Decimal, str]:
         """Gets the current quantity_on_hand for a product/variant at an outlet."""
-        db_session = session if session else self.core.get_session()
         try:
-            async with db_session as session:
+            async with self._get_session_context(session) as active_session:
                 stmt = select(Inventory.quantity_on_hand).where(
                     Inventory.outlet_id == outlet_id,
                     Inventory.product_id == product_id,
                     Inventory.variant_id == variant_id
                 )
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 quantity = result.scalar_one_or_none()
                 return Success(quantity if quantity is not None else Decimal("0"))
         except Exception as e:
             return Failure(f"Database error getting stock level: {e}")
 
     async def adjust_stock_level(self, outlet_id: UUID, product_id: UUID, variant_id: Optional[UUID], quantity_change: Decimal, session: AsyncSession) -> Result[Decimal, str]:
-        """Adjusts the stock level for a product. Must be called within an existing transaction."""
+        """
+        Adjusts the stock level for a product. MUST be called within an existing transaction.
+        This method does not manage its own session.
+        """
         try:
             stmt = select(Inventory).where(
                 Inventory.outlet_id == outlet_id,
@@ -75,7 +77,10 @@ class InventoryService(BaseService):
             return Failure(f"Failed to adjust stock level: {e}")
 
     async def log_movement(self, movement: StockMovement, session: AsyncSession) -> Result[StockMovement, str]:
-        """Logs a stock movement record within an existing transaction."""
+        """
+        Logs a stock movement record. MUST be called within an existing transaction.
+        This method does not manage its own session.
+        """
         try:
             session.add(movement)
             await session.flush()
@@ -83,10 +88,10 @@ class InventoryService(BaseService):
         except Exception as e:
             return Failure(f"Failed to log stock movement: {e}")
 
-    async def get_inventory_summary(self, company_id: UUID, outlet_id: Optional[UUID], limit: int, offset: int, search_term: Optional[str]) -> Result[List[dict], str]:
+    async def get_inventory_summary(self, company_id: UUID, outlet_id: Optional[UUID], limit: int, offset: int, search_term: Optional[str], session: Optional[AsyncSession] = None) -> Result[List[dict], str]:
         """Retrieves a summary of inventory levels for display."""
         try:
-            async with self.core.get_session() as session:
+            async with self._get_session_context(session) as active_session:
                 stmt = select(
                     Product.id.label("product_id"),
                     Product.name.label("product_name"),
@@ -111,18 +116,17 @@ class InventoryService(BaseService):
                     ))
                 
                 stmt = stmt.order_by(Product.name).offset(offset).limit(limit)
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 return Success([row._asdict() for row in result.all()])
         except Exception as e:
             return Failure(f"Database error getting inventory summary: {e}")
 
-    async def get_movements_for_product(self, company_id: UUID, product_id: UUID) -> Result[List[dict], str]:
+    async def get_movements_for_product(self, company_id: UUID, product_id: UUID, session: Optional[AsyncSession] = None) -> Result[List[dict], str]:
         """
         Retrieves the movement history for a specific product, enriched with user and product details.
         """
         try:
-            async with self.core.get_session() as session:
-                # FIX: Use explicit JOINs instead of a text-based subquery for better reliability.
+            async with self._get_session_context(session) as active_session:
                 stmt = (
                     select(
                         StockMovement.id,
@@ -147,7 +151,7 @@ class InventoryService(BaseService):
                     )
                     .order_by(StockMovement.created_at.desc())
                 )
-                result = await session.execute(stmt)
+                result = await active_session.execute(stmt)
                 return Success([row._asdict() for row in result.all()])
         except Exception as e:
             return Failure(f"Database error getting stock movements for product: {e}")

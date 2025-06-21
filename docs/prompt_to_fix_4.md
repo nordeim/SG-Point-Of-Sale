@@ -1,3 +1,30 @@
+please tell me your role and responsibilities and how you should act / behave.
+
+---
+Awesome understanding! Now help me to carefully review and validate the application codebase shared in the `project_codebase_files_set.md` attached. All the files in the current project codebase are listed in the `currect_project_file_structure.txt` attached, meaning if you want to look for a file and it is not in this list, then treat it as non-existent. Use line by line review to get a good grounding of the purpose of the application and its codebase, then create for me a detailed architecture overview document in markdown and named `Project Architecture Overview Document.md`. Make sure you do a careful review and validation of the application codebase shared. Use line by line review to get a good grounding of the purpose of the application and its codebase. Use at least 6000 words for the document that accurately describes the codebase in detail, use a clear diagram to show the codebase relationship. Include a section to describe the file structure and the purpose of each folder and key files, start with a diagram.
+
+---
+awesome job again! Below is the methodology to review and validate first, then create a correct updated version of the initial Alembic migration file, `migrations/versions/d5a6759ef2f7_initial_schema_setup.py`, which was auto-generated and now needs to be fixed to match the current ORM models, specifically addressing **Critical Issue #1: Schema Mismatch between ORM and Alembic Migration**.
+
+### 1. Deeply Understand the Goal
+
+I want a file that, when `alembic upgrade head` is run on an empty database, creates a schema that perfectly matches the one defined by the SQLAlchemy models in `app/models/`.
+
+### 2. Systematic Diagnosis & Analysis of Discrepancies
+
+You will compare three sources of truth:
+1.  **The Flawed Migration (`migrations/versions/d5a6759ef2f7_initial_schema_setup.py`):** This is the file to be replaced.
+2.  **The ORM Models (`app/models/*.py`):** This is the *desired state*. This is the ultimate source of truth for the application logic.
+3.  **The SQL Schema (`scripts/database/schema.sql`):** This is a helpful, human-readable reference for the desired state, which seems more up-to-date than the flawed migration.
+
+---
+Awesome understanding! please help me systematically and thoroughly review and validate the application start up log below. If everything is good, then proceed to carefully review and validate the current codebase consisting of *original* files enclosed in `project_codebase_files_set.md` (v1.5) superseded by some files added or modified in `new_codebase_files_set.md` (v1.6). All the files in the current project codebase are listed in the `currect_project_file_structure.txt` attached, meaning if you want to look for a file and it is not in this list, then treat it as non-existent. Use line by line review to get a good grounding of the purpose of the application and its codebase, then create for me a detailed architecture overview document in markdown and named `Project Architecture Overview Document.md`. Make sure you do a careful review and validation of the application codebase shared. Use line by line review to get a good grounding of the purpose of the application and its codebase. Use at least 6000 words for the document that accurately describes the codebase in detail, use a clear diagram to show the codebase relationship. Include a section to describe the file structure and the purpose of each folder and key files, start with a diagram.
+
+1. Refer to  `currect_project_file_structure.txt` for a complete list of all codebase files. If a file is not in this list, the file does not exist yet.
+2. Refer to `list_of_codebase_files_impacted_by_recent_greenlet_spawn_error.txt` for a list of the newly added and modified files.
+3. Refer to `Code Change Regression Analysis Report.md` for the recent changes made to the codebase - you are to do a very careful and thorough line by line validation for files affected by this change document 
+
+---
 awesome job! please help me systematically and thoroughly review and validate the application start up log below. If everything is good, then proceed to execute next step in your execution plan meticulously and systematically.
 
 Remember to explore carefully for multiple implementation options before choosing the most optimal and elegant solution to implement the changes. so you have to think deeply and systematically to explore all options and not just choose any option you may think of. also make sure you make a detailed execution plan with an integrated checklist for each step, before proceeding cautiously step by step. after completing each step, always double-check and validate your changes for that step against its checklist before proceeding to the next step. remember to always create a *complete* and updated replacement or new file for the affected files, enclose each complete and updated replacement file within ```py (or ```sql or ```js or or ```ts or ```tsx ```php extension) opening and ``` closing tags. after creating each file, use line by line "diff" command to double-check and validate the created file. After generating each new and complete version of a file, do a thorough review with the original version. after creating each file, use line by line "diff" command to double-check and validate the created file. Complete the review and validation before giving your summary and conclusion of task completion.
@@ -91,4 +118,15 @@ The changes made recently to address the "greenlet_spawn" error had been extensi
 
 ---
 Still the same error: can't make payment to complete a transaction.
+
+---
+Now everything works as before, but not when making final payment to complete a transaction. Actually the recent code changes mentioned in the code change document `Code Change Regression Analysis Report.md` *incorrectly* claimed that the issue was fixed when it was not when I tested it again. So you need to review the changes again and think and explore more deeply and systematically. Start by reviewing the screenshot of the error and the application log shared here.
+
+---
+We seem to have made progress because now it is a different error (see attached screenshot) when I tried to complete a transaction. This time the error is not "greenlet_spawn" related, though final sale payment still failed.
+
+---
+We seem to have resolved the final payment during a sale transaction issue. Please carefully review the application log and screenshot shared here.
+
+The changes made recently to address the "greenlet_spawn" error had been extensive and the list of files affected is pretty big. QA is deeply concerned about the possible regression bugs inadvertently introduced by the wide-ranging refactoring. QA want you do a very deep review of *all the changes made to the listed files* since the start of the last round of fixing the "unable to pay to complete a sale transaction" bug. Use a line by line comparison to compare the state of the files at the start of this round of change with the latest state of the files, then carefully review and validate (justify) the changes. Then create a detailed code change review report in markdown format to clearly and logically describe the natural of the issue (as understood), analysis performed and decisions made at each troubleshooting stage, with code snippets to illustrate the change and its justification. Use at least 6000 words for a comprehensive code review analysis report. You can create an enhanced report by building on the previous report `Code Change Regression Analysis Report.md`.
 
