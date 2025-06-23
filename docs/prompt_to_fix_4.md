@@ -133,3 +133,6 @@ The changes made recently to address the "greenlet_spawn" error had been extensi
 ---
 with the new insights and lessons learned, please help me to create a *complete* updated *replacement* file for the attached `Architecture Design Document.md`. This document is meant to serve as the guide to design a best practices type of architecture for other new projects, so as not to fall into similar pitfalls. Please think deeply and systematically to explore carefully and thoroughly for the best way to improve on this design guide document. 
 
+---
+awesome job! now help me to carefully create a *complete* updated *replacement* file for `pyproject.toml` with the versions of the python packages changed to use the versions currently installed as shown below.
+

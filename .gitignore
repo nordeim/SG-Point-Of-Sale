@@ -3,11 +3,7 @@
 __pycache__/
 
 # Virtual environment directories (commonly used by Poetry or custom setups)
-bin/
-include/
-lib/
-lib64
-.venv/
+.venv
 env/
 venv/
 

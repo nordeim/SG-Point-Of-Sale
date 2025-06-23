@@ -1,3 +1,72 @@
+<think>
+The user has provided a new, correct `pip list` output and has requested that I update the `pyproject.toml` file again. The process is the same as before, but the source data (the `pip list`) has changed.
+
+**1. Task Breakdown & Analysis**
+
+*   **Input:**
+    1.  The *original* `pyproject.toml` file from the `project_codebase_files_set.md`. This is an important instruction, as I should not build upon my previous modification.
+    2.  The new, correct output of `pip list`.
+*   **Goal:** Create a new, complete `pyproject.toml` file with updated versions.
+*   **Core Logic:**
+    1.  Identify all packages listed under `[tool.poetry.dependencies]` and `[tool.poetry.group.dev.dependencies]` in the original `pyproject.toml`.
+    2.  For each package, look up its version in the new `pip list`. The package names in `pyproject.toml` are case-insensitive and should be matched against the `pip list` output.
+    3.  Update the version specifier in `pyproject.toml` to reflect the version from the `pip list`. I will use the caret `^` prefix for semantic versioning, as is standard practice with Poetry (e.g., `^6.9.1`). This allows for compatible updates but pins the major version.
+    4.  Preserve all other sections of the file (`[tool.black]`, `[tool.ruff]`, etc.) without modification.
+    5.  Handle discrepancies: If a package from `pyproject.toml` is not in the `pip list`, I will leave its version specifier unchanged as a safety measure.
+    6.  Ignore extra packages from `pip list` that are not defined as direct dependencies in `pyproject.toml`.
+
+**2. Execution Plan: Mapping Dependencies**
+
+I will go through each dependency in the original `pyproject.toml` and find its corresponding version in the new `pip list`.
+
+**`[tool.poetry.dependencies]` (Production):**
+*   `PySide6`: `^6.9.0` -> `PySide6 6.9.1` -> Update to `^6.9.1`
+*   `SQLAlchemy`: `^2.0.30` -> `SQLAlchemy 2.0.41` -> Update to `^2.0.41`
+*   `alembic`: `^1.13.1` -> `alembic 1.16.2` -> Update to `^1.16.2`
+*   `asyncpg`: `^0.29.0` -> `asyncpg 0.30.0` -> Update to `^0.30.0`
+*   `greenlet`: `^3.0.3` -> `greenlet 3.2.3` -> Update to `^3.2.3`
+*   `pydantic`: `^2.7.1` -> `pydantic 2.11.7` -> Update to `^2.11.7`
+*   `pydantic-settings`: `^2.2.1` -> `pydantic-settings 2.10.0` -> Update to `^2.10.0`
+*   `python-dotenv`: `^1.0.0` -> `python-dotenv 1.1.0` -> Update to `^1.1.0`
+*   `bcrypt`: `^4.1.2` -> `bcrypt 4.3.0` -> Update to `^4.3.0`
+*   `cryptography`: `^42.0.7` -> `cryptography 45.0.4` -> Update to `^45.0.4`
+*   `structlog`: `^24.2.0` -> `structlog 25.4.0` -> Update to `^25.4.0`
+*   `aiohttp`: `^3.9.5` -> `aiohttp 3.12.13` -> Update to `^3.12.13`
+*   `reportlab`: `^4.1.0` -> `reportlab 4.4.2` -> Update to `^4.4.2`
+*   `openpyxl`: `^3.1.2` -> `openpyxl 3.1.5` -> Update to `^3.1.5`
+*   `qrcode`: `^7.4.2` -> `qrcode 8.2` -> Update to `^8.2`
+
+**`[tool.poetry.group.dev.dependencies]` (Development):**
+*   `psycopg2-binary`: `^2.9.10` -> `psycopg2-binary 2.9.10` -> No change needed, version matches.
+*   `aiosqlite`: `^0.20.0` -> `aiosqlite 0.21.0` -> Update to `^0.21.0`
+*   `pytest`: `^8.2.0` -> `pytest 8.4.1` -> Update to `^8.4.1`
+*   `pytest-qt`: `^4.2.0` -> `pytest-qt 4.4.0` -> Update to `^4.4.0`
+*   `pytest-asyncio`: `^0.23.0` -> `pytest-asyncio 1.0.0` -> Update to `^1.0.0`
+*   `pytest-cov`: `^5.0.0` -> `pytest-cov 6.2.1` -> Update to `^6.2.1`
+*   `factory-boy`: `^3.3.0` -> `factory-boy 3.3.3` -> Update to `^3.3.3`
+*   `black`: `^24.4.2` -> `black 25.1.0` -> Update to `^25.1.0`
+*   `ruff`: `^0.4.4` -> `ruff 0.12.0` -> Update to `^0.12.0`
+*   `mypy`: `^1.10.0` -> `mypy 1.16.1` -> Update to `^1.16.1`
+*   `pre-commit`: `^3.7.0` -> `pre-commit 4.2.0` -> Update to `^4.2.0`
+*   `Sphinx`: `^7.3.1` -> `Sphinx 8.2.3` -> Update to `^8.2.3`
+*   `myst-parser`: `^2.0.0` -> `myst-parser 4.0.1` -> Update to `^4.0.1`
+*   `sphinx-rtd-theme`: `^2.0.0` -> `sphinx-rtd-theme 3.0.2` -> Update to `^3.0.2`
+*   `ipython`: `^8.24.0` -> `ipython 9.3.0` -> Update to `^9.3.0`
+
+**3. Final Code Generation**
+
+I will now construct the complete `pyproject.toml` file with these version changes. I will be careful to preserve the structure, comments, and all other sections. The `SQLAlchemy` dependency has an `extras` key, which must be preserved. The `qrcode` dependency also has an `extras` key. I will maintain this structure.
+
+The plan is sound and directly addresses the user's request with the new data. I will now generate the final output.Of course. I will create a complete and updated replacement for your `pyproject.toml` file, using the original file as a base and meticulously updating the package versions to match your new, correct `pip list` output.
+
+My process guarantees:
+*   **Completeness:** The entire `pyproject.toml` file will be provided.
+*   **Accuracy:** All package versions found in your new `pip list` will be accurately reflected.
+*   **Preservation:** All comments, formatting, and tool configurations (`[tool.black]`, `[tool.ruff]`, etc.) from the original file will be preserved.
+
+Here is the complete, updated replacement file for `pyproject.toml`:
+
+```toml
 # pyproject.toml
 [tool.poetry]
 # --- Project Metadata ---
@@ -165,3 +234,8 @@ qt_api = "pyside6"    # Specify the Qt binding for pytest-qt.
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+```
+
+---
+https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221QHPuQ2OmdJqV6C6LfjDiePbLBUJZt8BL%22%5D,%22action%22:%22open%22,%22userId%22:%22108686197475781557359%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1WE7SP2KKstgtv-ic3NpKSV06F42uPZ-b/view?usp=sharing, https://drive.google.com/file/d/1ogzzUdmf1E20GNgAp7l5BPxOzYedBuyx/view?usp=sharing, https://drive.google.com/file/d/1rTViMCAfPJNou719v2qYziZ8o3aJ1UDg/view?usp=sharing, https://drive.google.com/file/d/1vfl0VUd-qB5sPz6YMsEp5hJFwyQiyxgJ/view?usp=sharing, https://drive.google.com/file/d/1vncax4DJ4L6LFuboaXx0UDMZsbc_kiiv/view?usp=sharing, https://drive.google.com/file/d/1x46nXSW7b8WZxVMaklB3vTTpW0aHMBJT/view?usp=sharing
+

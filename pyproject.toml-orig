@@ -24,31 +24,31 @@ python = ">=3.11,<3.14"
 # These are the essential packages required for the application to run in production.
 
 # GUI Framework
-PySide6 = "^6.9.1"         # The core Qt6 bindings for Python.
+PySide6 = "^6.9.0"         # The core Qt6 bindings for Python.
 
 # Database & ORM
-SQLAlchemy = {version = "^2.0.41", extras = ["asyncio"]} # The industry-standard ORM, with asyncio support.
-alembic = "^1.16.2"        # For database schema migrations.
-asyncpg = "^0.30.0"        # High-performance asyncio driver for PostgreSQL.
-greenlet = "^3.2.3"        # Required for SQLAlchemy's async bridge.
+SQLAlchemy = {version = "^2.0.30", extras = ["asyncio"]} # The industry-standard ORM, with asyncio support.
+alembic = "^1.13.1"        # For database schema migrations.
+asyncpg = "^0.29.0"        # High-performance asyncio driver for PostgreSQL.
+greenlet = "^3.0.3"        # Required for SQLAlchemy's async bridge.
 
 # Data Validation & Settings
-pydantic = "^2.11.7"        # For Data Transfer Objects (DTOs) and core validation.
-pydantic-settings = "^2.10.0" # Added for settings management with Pydantic v2.
-python-dotenv = "^1.1.0"   # For loading environment variables from .env files.
+pydantic = "^2.7.1"        # For Data Transfer Objects (DTOs) and core validation.
+pydantic-settings = "^2.2.1" # Added for settings management with Pydantic v2.
+python-dotenv = "^1.0.0"   # For loading environment variables from .env files.
 
 # Security
-bcrypt = "^4.3.0"          # For secure password hashing.
-cryptography = "^45.0.4"   # For any custom encryption needs.
+bcrypt = "^4.1.2"          # For secure password hashing.
+cryptography = "^42.0.7"   # For any custom encryption needs.
 
 # Logging
-structlog = "^25.4.0"       # For structured, context-aware logging.
+structlog = "^24.2.0"       # For structured, context-aware logging.
 
 # External Integrations & Utilities
-aiohttp = "^3.12.13"         # Asynchronous HTTP client for API integrations.
-reportlab = "^4.4.2"       # For generating PDF receipts and reports.
-openpyxl = "^3.1.5"        # For exporting data to Excel (.xlsx) files.
-qrcode = {version = "^8.2", extras = ["pil"]} # For generating QR codes (e.g., for PayNow).
+aiohttp = "^3.9.5"         # Asynchronous HTTP client for API integrations.
+reportlab = "^4.1.0"       # For generating PDF receipts and reports.
+openpyxl = "^3.1.2"        # For exporting data to Excel (.xlsx) files.
+qrcode = {version = "^7.4.2", extras = ["pil"]} # For generating QR codes (e.g., for PayNow).
 
 
 # --- Development Group Dependencies ---
@@ -56,28 +56,28 @@ qrcode = {version = "^8.2", extras = ["pil"]} # For generating QR codes (e.g., f
 # This keeps the production installation lean and clean.
 [tool.poetry.group.dev.dependencies]
 psycopg2-binary = "^2.9.10" # Synchronous driver for Alembic
-aiosqlite = "^0.21.0"      # Async driver for SQLite test database
+aiosqlite = "^0.20.0"      # Async driver for SQLite test database
 
 # Testing Framework
-pytest = "^8.4.1"             # The primary testing framework.
-pytest-qt = "^4.4.0"          # For testing PySide6 UI components.
-pytest-asyncio = "^1.0.0"    # For testing asyncio code.
-pytest-cov = "^6.2.1"         # For measuring test coverage.
-factory-boy = "^3.3.3"        # For creating test data fixtures.
+pytest = "^8.2.0"             # The primary testing framework.
+pytest-qt = "^4.2.0"          # For testing PySide6 UI components.
+pytest-asyncio = "^0.23.0"    # For testing asyncio code.
+pytest-cov = "^5.0.0"         # For measuring test coverage.
+factory-boy = "^3.3.0"        # For creating test data fixtures.
 
 # Code Quality & Formatting
-black = "^25.1.0"            # The uncompromising code formatter.
-ruff = "^0.12.0"               # An extremely fast Python linter, replacing flake8, isort, etc.
-mypy = "^1.16.1"              # Static type checker for Python.
-pre-commit = "^4.2.0"         # For managing and maintaining pre-commit hooks.
+black = "^24.4.2"            # The uncompromising code formatter.
+ruff = "^0.4.4"               # An extremely fast Python linter, replacing flake8, isort, etc.
+mypy = "^1.10.0"              # Static type checker for Python.
+pre-commit = "^3.7.0"         # For managing and maintaining pre-commit hooks.
 
 # Documentation
-Sphinx = "^8.2.3"             # The standard documentation generator for Python projects.
-myst-parser = "^4.0.1"        # To write Sphinx documentation in Markdown.
-sphinx-rtd-theme = "^3.0.2"   # A popular theme for Sphinx docs.
+Sphinx = "^7.3.1"             # The standard documentation generator for Python projects.
+myst-parser = "^2.0.0"        # To write Sphinx documentation in Markdown.
+sphinx-rtd-theme = "^2.0.0"   # A popular theme for Sphinx docs.
 
 # Interactive Development
-ipython = "^9.3.0"           # A better interactive Python shell.
+ipython = "^8.24.0"           # A better interactive Python shell.
 
 
 # ==============================================================================

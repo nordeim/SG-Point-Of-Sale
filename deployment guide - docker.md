@@ -26,8 +26,8 @@ services:
   # ---------------------------
   # This service provides the primary database for the application.
   db:
-    # Use the official PostgreSQL 15 image with the Alpine base for a smaller footprint.
-    image: postgres:15-alpine
+    # Use the official PostgreSQL 16 image with the Alpine base for a smaller footprint.
+    image: postgres:16-alpine
 
     # A friendly name for the container to easily identify it.
     container_name: sgpos_dev_db
@@ -165,7 +165,7 @@ Now that your configuration is ready, you can start the backend services.
     *   `up`: This command creates and starts the containers defined in the file.
     *   `-d`: (Detached mode) This runs the containers in the background and leaves your terminal free.
 
-Docker will now download the `postgres:15-alpine` image (if you don't have it already) and start the container. The first time you run this, it may take a minute or two. Subsequent starts will be much faster.
+Docker will now download the `postgres:16-alpine` image (if you don't have it already) and start the container. The first time you run this, it may take a minute or two. Subsequent starts will be much faster.
 
 ## **Step 3: Verify the Environment is Running**
 
@@ -180,7 +180,7 @@ You can check that everything started correctly.
 
     ```
     NAME             IMAGE                  COMMAND                  SERVICE   STATUS              PORTS
-    sgpos_dev_db     postgres:15-alpine     "docker-entrypoint.s…"   db        running (healthy)   0.0.0.0:5432->5432/tcp
+    sgpos_dev_db     postgres:16-alpine     "docker-entrypoint.s…"   db        running (healthy)   0.0.0.0:5432->5432/tcp
     ```
 
 2.  **Connect with a Database Tool (Optional but Recommended):**
